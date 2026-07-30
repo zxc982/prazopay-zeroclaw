@@ -43,7 +43,7 @@ quality of human work.
 | T11 | ZeroClaw invents a status | Read-only tool returns structured state; chain remains authoritative |
 | T12 | Raw contract or deliverable leaks on-chain | Store only fixed-size hashes |
 | T13 | Public RPC lies or is stale | Output reports advisory status; settlement is enforced by the program, not the RPC response |
-| T14 | Program upgrade changes rules | Day 2 must disclose upgrade authority and freeze/revocation plan |
+| T14 | Program upgrade changes rules | Public deployment evidence discloses upgrade authority; production requires a documented freeze or revocation plan |
 | T15 | Discord prompt injection changes monitoring behavior | Heartbeat session-context loading is disabled; the monitor accepts a configured PDA and fresh tool output only |
 | T16 | Model copies a malformed or different PDA | Tool validates base58, program owner, discriminator, and exact account length; invalid inputs fail closed |
 | T17 | Repeated or ambiguous alert delivery | Polling is separated from sparse entry/boundary/escalation windows; the loopback relay commits stage-bound event IDs only after successful Discord send and suppresses committed IDs across restarts |
@@ -59,7 +59,7 @@ quality of human work.
 - A malicious worker can submit a meaningless evidence hash. The funder may
   request a revision before the review window expires.
 - A lost funder or worker key can strand role-specific actions.
-- Native SOL in Day 1 does not model SPL token-account edge cases.
+- Native SOL settlement does not model SPL token-account edge cases.
 - Upgrade authority remains a governance risk until the deployment policy is
   frozen and documented.
 - ZeroClaw reported application-layer security because no OS sandbox backend

@@ -47,5 +47,5 @@ grep -Fq "$program_id" programs/prazopay/src/lib.rs
 grep -Fq "$program_id" plugins/prazopay-status/src/status.rs
 grep -Fq "$program_id" target/idl/prazopay.json
 
-echo "DAY1_CHECK=PASS"
+echo "DEPLOYMENT_WORKSPACE_CHECK=PASS"
 echo "PROGRAM_ID=$program_id"

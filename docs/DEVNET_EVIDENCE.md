@@ -1,10 +1,10 @@
-# Day 2 execution record
+# Devnet deployment and runtime evidence
 
 Date: 2026-07-30
 
 ## Goal
 
-Deploy the exact Day 1 SBF to Solana devnet, execute every terminal milestone
+Deploy the exact committed SBF to Solana devnet, execute every terminal milestone
 path with valueless test identities, and invoke the read-only status component
 through the real ZeroClaw v0.8.3 WASM host.
 

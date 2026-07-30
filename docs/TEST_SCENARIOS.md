@@ -244,7 +244,7 @@ Run the complete local suite from PowerShell:
 
 ```powershell
 Set-Location '<repository>'
-.\scripts\day1-check.ps1
+.\scripts\reproduce.ps1
 ```
 
 Run only the state-machine cases:

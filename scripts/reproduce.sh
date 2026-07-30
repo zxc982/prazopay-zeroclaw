@@ -34,5 +34,6 @@ bash -n scripts/zeroclaw-prazopay-relay.sh
 bash -n scripts/zeroclaw-prazopay-approval.sh
 bash -n scripts/zeroclaw-prazopay-skill.sh
 python3 -m unittest discover -s scripts/tests -p 'test_*.py'
+python3 scripts/verify_public_evidence.py
 
-echo "REPO_CHECK=PASS"
+echo "REPRODUCE=PASS"

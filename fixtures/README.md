@@ -17,5 +17,5 @@ delivery content, or local user path is present.
 tests. Its SHA-256 is
 `b792b9099410354b8f940bb7fa9aef4bbfdb8f26b51161c5a5942884199d5bf2`,
 matching the deployed prefix recorded in `devnet-deployment.json` and
-`docs/DAY2.md`. It contains executable bytecode only, not deployment authority
+`docs/DEVNET_EVIDENCE.md`. It contains executable bytecode only, not deployment authority
 or wallet material.

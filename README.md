@@ -44,9 +44,37 @@ ZeroClaw is a coordinator, never a custodian:
   program's deterministic revision rule); and
 - no wallet key, seed phrase, or signing endpoint is exposed to ZeroClaw.
 
-## Day 1 acceptance suite
+## Reproduce from a clean checkout
 
-The local LiteSVM and state-machine suite demonstrates:
+No wallet, Discord bot, model API key, or Solana deployment keypair is required.
+On Windows with WSL:
+
+```powershell
+git clone https://github.com/zxc982/prazopay-zeroclaw.git
+Set-Location .\prazopay-zeroclaw
+.\scripts\reproduce.ps1
+```
+
+On Linux or inside WSL:
+
+```bash
+git clone https://github.com/zxc982/prazopay-zeroclaw.git
+cd prazopay-zeroclaw
+bash ./scripts/reproduce.sh
+```
+
+The final line is `REPRODUCE=PASS`. The command checks formatting, all Rust
+workspace tests, LiteSVM execution against the exact deployed SBF fixture, the
+WASI Preview 2 status component, Bash syntax, relay tests, fixture consistency,
+and the committed SBF hash. If `wasm-tools` is installed, it also validates the
+compiled component.
+
+See [`docs/REPRODUCE.md`](docs/REPRODUCE.md) for prerequisites, expected output,
+the verification map, and independent public-chain checks.
+
+## What the reproduction verifies
+
+The deterministic suite demonstrates:
 
 1. a funder creates and funds one milestone;
 2. the stored parties, amount, terms hash, initial deadline, review window, and
@@ -61,28 +89,9 @@ The local LiteSVM and state-machine suite demonstrates:
    and
 9. every terminal path releases the locked amount exactly once.
 
-To reproduce the exact deployed SBF from the original deployment workspace,
-run the Windows/WSL check below. It intentionally expects the ignored
-`target/deploy/prazopay-keypair.json`; that file is not published.
-
-```powershell
-.\scripts\day1-check.ps1
-```
-
-For a clean checkout that does not contain the ignored deployment keypair, run
-the repository verification suite instead:
-
-```powershell
-.\scripts\repo-check.ps1
-```
-
-It checks formatting, all Rust workspace tests, the WASI Preview 2 status
-component, Bash syntax, and the durable relay's Python tests. If `wasm-tools`
-is installed, it also validates the compiled component.
-
 ## Verified devnet evidence
 
-The exact Day 1 SBF is deployed at
+The exact committed SBF is deployed at
 [`DjdT1wW8zEoK395yujT5ujBsDboBUFyx5LCfLBSwxAjm`](https://explorer.solana.com/address/DjdT1wW8zEoK395yujT5ujBsDboBUFyx5LCfLBSwxAjm?cluster=devnet).
 Independent one-lamport milestones exercised revision plus approval,
 silent-review settlement, and permissionless expiry refund. A real ZeroClaw v0.8.3
@@ -96,7 +105,8 @@ state on schedule, classifies the next permitted human action, and delivers the
 alert without ever becoming the signer or settlement authority.
 
 See the [live active-monitor record](docs/ACTIVE_MONITOR.md),
-[`docs/DAY2.md`](docs/DAY2.md), and the public [`fixtures/`](fixtures/)
+[`docs/DEVNET_EVIDENCE.md`](docs/DEVNET_EVIDENCE.md), and the public
+[`fixtures/`](fixtures/)
 evidence.
 
 Protocol v1 is deployed at slot `479993358`; the deployed prefix matches the
@@ -107,10 +117,10 @@ Legacy accounts retain their original worker-signed claim timing.
 The public evidence is independently inspectable without a PrazoPay wallet or
 ZeroClaw configuration:
 
-- [current v1 milestone](https://explorer.solana.com/address/ikUaYZUARH3KXK9y98MgfgSVsZJu3tcgHfgeKnCTTqB?cluster=devnet);
-- [creation transaction](https://explorer.solana.com/tx/2Eaf8P85jm5YhfsRg9akqKGgMqHf44BZ9PWxXbigSLKkUQgc1hRJAonr5Hx9UZZgmDpM3eSfyc5qzXPk2YjrA8cY?cluster=devnet);
-- [delivery transaction](https://explorer.solana.com/tx/3KoickzBmXxBbWpEpPn96CvnbpvW2po2Yz9ZdWA8162ZDCJWWvEuJa9EComt9mcsUrDZuc64Q7kJEata3rqUQh4p?cluster=devnet); and
-- [permissionless settlement](https://explorer.solana.com/tx/2AZLiK1TaQ3GRFWpvkkbvHaQhXQJyr4Kz4TywZHJgKYCnkY3hJtyhDSqTvVZbjAYt3MqUUaLvFQbvKS12TJAQrBJ?cluster=devnet).
+- [current v1 milestone](https://explorer.solana.com/address/ikUaYZUARH3KXK9y98MgfgSVsZJu3tcgHfgeKnCTTqB?cluster=devnet)
+- [creation transaction](https://explorer.solana.com/tx/2Eaf8P85jm5YhfsRg9akqKGgMqHf44BZ9PWxXbigSLKkUQgc1hRJAonr5Hx9UZZgmDpM3eSfyc5qzXPk2YjrA8cY?cluster=devnet)
+- [delivery transaction](https://explorer.solana.com/tx/3KoickzBmXxBbWpEpPn96CvnbpvW2po2Yz9ZdWA8162ZDCJWWvEuJa9EComt9mcsUrDZuc64Q7kJEata3rqUQh4p?cluster=devnet)
+- [permissionless settlement](https://explorer.solana.com/tx/2AZLiK1TaQ3GRFWpvkkbvHaQhXQJyr4Kz4TywZHJgKYCnkY3hJtyhDSqTvVZbjAYt3MqUUaLvFQbvKS12TJAQrBJ?cluster=devnet)
 
 ## Repository layout
 
@@ -125,14 +135,17 @@ docs/THREAT_MODEL.md        Assets, trust boundary, threats, controls
 docs/COMPETITIVE_POSITIONING.md
 docs/TEST_SCENARIOS.md      Normal, boundary, adversarial, and monitor suites
 docs/ACTIVE_MONITOR.md      Proactive devnet-to-Discord evidence
-docs/DAY1.md                Day 1 checklist and evidence
-docs/DAY2.md                Devnet deployment and real ZeroClaw evidence
+docs/LOCAL_VERIFICATION.md  Local verification scope and recorded evidence
+docs/DEVNET_EVIDENCE.md     Devnet deployment and real ZeroClaw evidence
+docs/REPRODUCE.md           One-command clean-checkout instructions
 ```
 
 ## Safety boundary
 
-Day 1 is localnet-only. Day 2 uses isolated devnet test identities and
-one-lamport milestones. Nothing here deploys to mainnet, handles a real-value
-asset, exposes a signing interface to ZeroClaw, or submits a bounty entry.
-Publishing this source and its public devnet evidence does not grant access to
-any wallet, Discord bot, model provider, or deployment authority.
+The one-command reproduction is local and does not deploy or submit a
+transaction. The linked public evidence was produced with isolated devnet test
+identities and one-lamport milestones. Nothing here deploys to mainnet, handles
+a real-value asset, exposes a signing interface to ZeroClaw, or submits a
+bounty entry. Publishing this source and its public devnet evidence does not
+grant access to any wallet, Discord bot, model provider, or deployment
+authority.

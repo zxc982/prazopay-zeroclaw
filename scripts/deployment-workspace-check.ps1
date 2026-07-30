@@ -11,9 +11,7 @@ if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($wslHome)) {
 }
 $toolPath = "$wslHome/.local/share/solana/install/active_release/bin:$wslHome/.cargo/bin:$wslHome/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
 
-& wsl.exe -d $Distro --cd $projectRoot -- /usr/bin/env `
-    "PATH=$toolPath" `
-    bash ./scripts/repo-check.sh
+& wsl.exe -d $Distro --cd $projectRoot -- /usr/bin/env "PATH=$toolPath" bash ./scripts/deployment-workspace-check.sh
 if ($LASTEXITCODE -ne 0) {
-    throw "PrazoPay repository check failed with exit code $LASTEXITCODE."
+    throw "PrazoPay deployment-workspace check failed with exit code $LASTEXITCODE."
 }

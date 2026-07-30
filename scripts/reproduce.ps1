@@ -11,7 +11,9 @@ if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($wslHome)) {
 }
 $toolPath = "$wslHome/.local/share/solana/install/active_release/bin:$wslHome/.cargo/bin:$wslHome/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
 
-& wsl.exe -d $Distro --cd $projectRoot -- /usr/bin/env "PATH=$toolPath" bash ./scripts/day1-check.sh
+& wsl.exe -d $Distro --cd $projectRoot -- /usr/bin/env `
+    "PATH=$toolPath" `
+    bash ./scripts/reproduce.sh
 if ($LASTEXITCODE -ne 0) {
-    throw "PrazoPay Day 1 check failed with exit code $LASTEXITCODE."
+    throw "PrazoPay reproduction failed with exit code $LASTEXITCODE."
 }
