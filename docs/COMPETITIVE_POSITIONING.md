@@ -1,0 +1,50 @@
+# Competitive positioning
+
+Snapshot date: 2026-07-29
+
+## Crowded lanes
+
+Public ZeroClaw bounty projects already cover:
+
+- Solana Pay invoice/QR creation;
+- confirmed payment monitoring;
+- unsigned SOL/SPL transfer construction;
+- token-risk checks;
+- durable-nonce transfers; and
+- x402 metered API settlement.
+
+PrazoPay should not claim novelty in any of those lanes.
+
+## PrazoPay's lane
+
+| Question | Existing payment tools | PrazoPay |
+|---|---|---|
+| Primary problem | How to request, observe, or execute a payment | How to make a funded work deadline enforceable |
+| Money timing | Payment happens now or after human signing | Funds are committed before work starts |
+| Ghosting | Usually outside scope | Explicitly accepted silence rule, full review, claim grace, then worker-signed claim |
+| Missed deadline | Usually outside scope | Deterministic refund when no submission is pending |
+| Terms | Invoice fields or spend policy | Immutable terms commitment plus lifecycle |
+| Agent authority | May build, monitor, or micro-spend | Read-only coordination; program owns settlement rules |
+| Agent workflow | Often request/response | Native heartbeat assigns the next human role; five-minute polls produce only state-entry, boundary, and sparse escalation alerts |
+| Demo proof | Payment or receipt | Competing terminal paths and forbidden transitions |
+
+## Judge-facing sentence
+
+> PrazoPay is not a wallet tool. It is a deadline protocol: a Solana program
+> locks a freelance milestone before work begins, records the funder's explicit
+> silence-acceptance acknowledgement, guarantees a complete review window plus
+> claim grace after an on-time submission, and refunds only when the active
+> deadline passes without a pending delivery. ZeroClaw coordinates and
+> escalates the workflow without ever holding a key.
+
+## Evidence required before submission
+
+- real Anchor program, not a simulated ledger;
+- LiteSVM tests for both payout paths and the expiry refund path;
+- unauthorized and too-early/too-late failure tests;
+- read-only Rust/WASI Preview 2 ZeroClaw tool;
+- one real ZeroClaw invocation;
+- one no-prompt ZeroClaw heartbeat alert plus a terminal `NO_REPLY` control;
+- one devnet lifecycle with explorer links;
+- concise threat model and custody statement; and
+- a demo under three minutes showing the state transitions, not slides alone.

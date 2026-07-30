@@ -1,0 +1,7 @@
+name = "prazopay-status"
+version = "0.1.0"
+description = "Read one PrazoPay devnet milestone and return deterministic lifecycle facts plus proactive alert decisions."
+author = "PrazoPay"
+wasm_path = "prazopay-status.wasm"
+capabilities = ["tool"]
+permissions = ["http_client"]

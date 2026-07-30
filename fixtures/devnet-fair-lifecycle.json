@@ -1,0 +1,43 @@
+{
+  "schema": "prazopay.devnet.fair-lifecycle.v1",
+  "cluster": "devnet",
+  "program": {
+    "program_id": "DjdT1wW8zEoK395yujT5ujBsDboBUFyx5LCfLBSwxAjm",
+    "programdata_address": "4qVQJLEipmRqcKYbEUnptxJ8aYbtBojryEDEHSzwf6BM",
+    "upgrade_authority": "9yZoUQRdQ13cZkf6nPb4apAV7S2pPkuwYUyDmTpM8c8g",
+    "deployed_slot": 479993358,
+    "upgrade_signature": "5C5g6QpBAVAhQTd499HYrrxxG8kk69E68R2QnQndcWFEQZzhcS2VJq4qLxzhWCxXoqS32ngehArrqP1cgPVHcWE4",
+    "local_sbf_length": 216936,
+    "programdata_length": 225784,
+    "zero_padding_length": 8848,
+    "local_and_deployed_prefix_sha256": "b792b9099410354b8f940bb7fa9aef4bbfdb8f26b51161c5a5942884199d5bf2"
+  },
+  "lifecycle": {
+    "milestone": "ikUaYZUARH3KXK9y98MgfgSVsZJu3tcgHfgeKnCTTqB",
+    "funder": "CkNmityXoeSFZmJErqDHKbMF5mgcwLqEKiXtxsFY6ZF8",
+    "worker": "F5M9qTSuXVipJY7Rd7ZG3oySxX7iuEfi5v55nPmtRmWw",
+    "amount_lamports": 1,
+    "due_at": 1785424322,
+    "review_window_secs": 60,
+    "claim_grace_secs": 60,
+    "transactions": {
+      "create": "2Eaf8P85jm5YhfsRg9akqKGgMqHf44BZ9PWxXbigSLKkUQgc1hRJAonr5Hx9UZZgmDpM3eSfyc5qzXPk2YjrA8cY",
+      "submit": "3KoickzBmXxBbWpEpPn96CvnbpvW2po2Yz9ZdWA8162ZDCJWWvEuJa9EComt9mcsUrDZuc64Q7kJEata3rqUQh4p",
+      "permissionless_settle": "2AZLiK1TaQ3GRFWpvkkbvHaQhXQJyr4Kz4TywZHJgKYCnkY3hJtyhDSqTvVZbjAYt3MqUUaLvFQbvKS12TJAQrBJ"
+    },
+    "final_status": "paid",
+    "terminal_at": 1785422756,
+    "worker_balance_delta_lamports": 1
+  },
+  "zeroclaw_monitor": {
+    "active_event": "PERMISSIONLESS_SETTLEMENT_READY",
+    "active_responsible_role": "permissionless_trigger",
+    "worker_overdue": false,
+    "terminal_event": "SETTLEMENT_SUCCESS",
+    "terminal_responsible_role": "both",
+    "terminal_card_delivered": true,
+    "heartbeat_disabled_after_terminal_delivery": true,
+    "creator_discord_doctor": "healthy",
+    "worker_discord_doctor": "healthy"
+  }
+}

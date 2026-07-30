@@ -1,0 +1,22 @@
+skip_local_validator = true
+
+[toolchain]
+
+[features]
+resolution = true
+skip-lint = false
+
+[programs.localnet]
+prazopay = "DjdT1wW8zEoK395yujT5ujBsDboBUFyx5LCfLBSwxAjm"
+
+[programs.devnet]
+prazopay = "DjdT1wW8zEoK395yujT5ujBsDboBUFyx5LCfLBSwxAjm"
+
+[provider]
+cluster = "localnet"
+wallet = "~/.config/solana/id.json"
+
+[scripts]
+test = "cargo test"
+
+[hooks]

@@ -1,0 +1,15 @@
+{
+  "schema": "prazopay-devnet-deployment-v1",
+  "cluster": "devnet",
+  "program_id": "DjdT1wW8zEoK395yujT5ujBsDboBUFyx5LCfLBSwxAjm",
+  "programdata_address": "4qVQJLEipmRqcKYbEUnptxJ8aYbtBojryEDEHSzwf6BM",
+  "upgrade_authority": "9yZoUQRdQ13cZkf6nPb4apAV7S2pPkuwYUyDmTpM8c8g",
+  "deployed_slot": 479856055,
+  "deployment_signature": "4ajY2Uy644Q7VRNVN46XdnfSzqEwMEcH2KHhPToTEtTWNoisoG1WNXTBtKktX8LpbWmJCS8xyesxgLpyQw48bi3k",
+  "block_time": 1785371920,
+  "data_length": 205304,
+  "program_balance_lamports": 1430119920,
+  "local_sbf_sha256": "3dc650ca83d181cdadc4cb6a8c81df3a241abac665d1499154ba75cf15d1b909",
+  "deployed_sbf_sha256": "3dc650ca83d181cdadc4cb6a8c81df3a241abac665d1499154ba75cf15d1b909",
+  "confirmation_status": "finalized"
+}

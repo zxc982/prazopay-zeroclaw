@@ -1,0 +1,61 @@
+{
+  "schema": "prazopay.active-monitor.evidence.v1",
+  "cluster": "devnet",
+  "zeroclaw_version": "0.8.3",
+  "program_id": "DjdT1wW8zEoK395yujT5ujBsDboBUFyx5LCfLBSwxAjm",
+  "milestone": "gjnjUCGw33rDXWP66ztrR8KiX13DZWStkj3jR5LuhV8",
+  "amount_lamports": 1,
+  "transactions": {
+    "create": "hSUHxE8rsS7b1KzeYqQPgNB5wKqGRw3huZ4KP4RzS6xUgbMFmcv4D8hB8oLnTVUPzpvfBAp8gQHUmp2Xz31Lvzk",
+    "submit": "2mfcM66ZGJJucrCgpW7yVWBj5boxd6v46myx84d1aU3VEUvgpqx1KcDqWHJpb8Qa7mBVVeKsSH7jGigqCe6FrYrb"
+  },
+  "heartbeat": {
+    "agent": "creator",
+    "target": "discord",
+    "interval_minutes": 5,
+    "two_phase": false,
+    "load_session_context": false,
+    "allowed_tools": [
+      "prazopay_status"
+    ],
+    "delivery_semantics": "at_least_once"
+  },
+  "observations": [
+    {
+      "slot": 479874165,
+      "observed_at": 1785378567,
+      "status": "submitted",
+      "event_code": "FUNDER_REVIEW_REQUIRED",
+      "severity": "warning",
+      "responsible_role": "funder",
+      "allowed_actions": [
+        "approve_milestone",
+        "request_revision"
+      ],
+      "event_id": "prazopay:21498f1ac097a294b16e17570ba0fe6a",
+      "discord_message_id": "1532213551857668266"
+    },
+    {
+      "slot": 479874716,
+      "observed_at": 1785378770,
+      "status": "submitted",
+      "event_code": "WORKER_CLAIM_READY",
+      "severity": "action",
+      "responsible_role": "worker",
+      "allowed_actions": [
+        "approve_milestone",
+        "claim_after_review"
+      ],
+      "event_id": "prazopay:17194f928a067a7fbedf1b8ff0a4d6cf"
+    }
+  ],
+  "quiet_terminal_control": {
+    "milestone": "7faAut164TQQotzGrcLnbwpVHt4T2X6GhZSEswssYqsz",
+    "slot": 479873377,
+    "status": "paid",
+    "event_code": "TERMINAL_PAID_QUIET",
+    "event_id": "prazopay:493da0cfa7d7a981041c8371390a4a99",
+    "agent_response": "NO_REPLY",
+    "discord_delivery_suppressed": true
+  }
+}
