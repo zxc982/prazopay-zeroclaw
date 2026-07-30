@@ -21,7 +21,7 @@ const EVIDENCE_HASH: [u8; 32] = [9; 32];
 
 fn new_svm() -> LiteSVM {
     let mut svm = LiteSVM::new();
-    let program = include_bytes!("../../../target/deploy/prazopay.so");
+    let program = include_bytes!("../../../fixtures/prazopay-v1.so");
     svm.add_program(prazopay::id(), program).unwrap();
     svm
 }

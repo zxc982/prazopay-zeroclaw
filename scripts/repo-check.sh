@@ -17,6 +17,11 @@ RUSTUP_TOOLCHAIN=1.97.1 \
   cargo build -p prazopay-status --target wasm32-wasip2 --release
 
 component="$wasm_target/wasm32-wasip2/release/prazopay_status.wasm"
+printf '%s  %s\n' \
+  'b792b9099410354b8f940bb7fa9aef4bbfdb8f26b51161c5a5942884199d5bf2' \
+  'fixtures/prazopay-v1.so' | sha256sum --check -
+echo "SBF_FIXTURE_HASH=PASS"
+
 if command -v wasm-tools >/dev/null 2>&1; then
   wasm-tools validate "$component"
   echo "WASM_VALIDATE=PASS"

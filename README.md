@@ -119,6 +119,7 @@ programs/prazopay/          Anchor program and LiteSVM tests
 plugins/prazopay-status/    Read-only ZeroClaw WASM status tool
 clients/prazopay-devnet/    Three-path devnet lifecycle runner
 scripts/zeroclaw-prazopay-monitor.sh
+fixtures/prazopay-v1.so     Exact SBF used by clean-room LiteSVM tests
 docs/PROTOCOL.md            State machine and invariants
 docs/THREAT_MODEL.md        Assets, trust boundary, threats, controls
 docs/COMPETITIVE_POSITIONING.md
