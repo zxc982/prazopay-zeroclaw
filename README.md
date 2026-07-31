@@ -1,6 +1,7 @@
 # PrazoPay
 
 **Deadline-native milestone escrow with proactive ZeroClaw operations.**
+[**▶ Watch the PrazoPay live devnet demo on YouTube →**](https://youtu.be/Jy_S5nCCiG0)
 
 [![CI](https://github.com/zxc982/prazopay-zeroclaw/actions/workflows/ci.yml/badge.svg)](https://github.com/zxc982/prazopay-zeroclaw/actions/workflows/ci.yml)
 
