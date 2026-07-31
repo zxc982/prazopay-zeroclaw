@@ -59,7 +59,7 @@ flowchart TB
     Failed --> End
 ```
 
-ZeroClaw observes finalized Solana state and reports the responsible role and next permitted action. Human wallets retain funding, delivery, approval, and revision authority.
+ZeroClaw observes every stage through finalized, read-only Solana RPC calls and reports only the responsible role and currently permitted action. It never receives a wallet key or signing authority. Delay alerts occur at the first delay, 30 minutes, 2 hours, and then once per day. After one acknowledged terminal notification, monitoring stops.
 
 ## Why this is not another payment bot
 
