@@ -23,29 +23,40 @@ the original funder.
 ## Protocol lifecycle
 
 ```mermaid
-stateDiagram-v2
-    direction TB
+flowchart TB
+    Start((Start))
 
-    state "OPEN\nEscrow funded; waiting for delivery" as Open
-    state "SUBMITTED\nFunder review window" as Review
-    state "CLAIM GRACE\nStatus remains SUBMITTED" as Grace
-    state "PAID\nSOL released only to immutable Worker" as Paid
-    state "REFUNDED\nSOL returned only to original Funder" as Refunded
+    Open["OPEN<br/>Escrow funded<br/>Waiting for Worker delivery"]
+    Review["SUBMITTED<br/>Funder review window"]
+    Grace["CLAIM GRACE<br/>Status remains SUBMITTED<br/>No automatic payout"]
+    Claimable["CLAIMABLE<br/>Recipient is already fixed<br/>Status remains SUBMITTED"]
+    Paid["PAID<br/>SOL released only to<br/>the immutable Worker"]
+    Refunded["REFUNDED<br/>SOL returned only to<br/>the original Funder"]
 
-    [*] --> Open: Funder creates milestone\nand locks SOL
+    Success["SUCCESS Discord card<br/>Delivered once<br/>Monitoring stops"]
+    Failed["FAILED Discord card<br/>Delivered once<br/>Monitoring stops"]
 
-    Open --> Review: Worker calls submit_delivery\nbefore active due_at
-    Open --> Refunded: No pending delivery after due_at\nAnyone calls refund_expired
+    End((Closed))
 
-    Review --> Paid: Funder calls approve_milestone
-    Review --> Open: Funder calls request_revision\nFresh delivery window; maximum 3
-    Review --> Grace: Review deadline expires\nNo automatic payout
+    Start -->|"Funder creates milestone<br/>and locks SOL"| Open
 
-    Grace --> Paid: Funder approves during grace
-    Grace --> Paid: After claimable_at\nAnyone calls settle_after_review
+    Open -->|"Worker calls submit_delivery<br/>before active due_at"| Review
+    Open -->|"No pending delivery after due_at<br/>Anyone calls refund_expired"| Refunded
 
-    Paid --> [*]: One SUCCESS Discord card\nThen monitoring stops
-    Refunded --> [*]: One FAILED Discord card\nThen monitoring stops
+    Review -->|"Funder calls approve_milestone"| Paid
+    Review -->|"Funder requests revision<br/>Fresh window, up to 3 revisions"| Open
+    Review -->|"Review deadline expires"| Grace
+
+    Grace -->|"Funder approves during grace"| Paid
+    Grace -->|"claimable_at is reached"| Claimable
+
+    Claimable -->|"Anyone calls settle_after_review"| Paid
+
+    Paid --> Success
+    Refunded --> Failed
+
+    Success --> End
+    Failed --> End
 ```
 
 ZeroClaw observes finalized Solana state and reports the responsible role and next permitted action. Human wallets retain funding, delivery, approval, and revision authority.
