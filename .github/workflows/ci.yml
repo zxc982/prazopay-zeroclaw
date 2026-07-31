@@ -17,5 +17,11 @@ jobs:
           toolchain: 1.97.1
           targets: wasm32-wasip2
           components: rustfmt
+      - name: Install Solana CLI
+        run: |
+          sh -c "$(curl -sSfL https://release.anza.xyz/v3.1.10/install)"
+          echo "$HOME/.local/share/solana/install/active_release/bin" >> "$GITHUB_PATH"
+      - name: Install wasm-tools
+        run: cargo install wasm-tools --version 1.254.0 --locked
       - name: Repository checks
         run: bash ./scripts/reproduce.sh

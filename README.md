@@ -64,13 +64,24 @@ bash ./scripts/reproduce.sh
 ```
 
 The final line is `REPRODUCE=PASS`. The command checks formatting, all Rust
-workspace tests, LiteSVM execution against the exact deployed SBF fixture, the
-WASI Preview 2 status component, Bash syntax, relay tests, fixture consistency,
-and the committed SBF hash. If `wasm-tools` is installed, it also validates the
-compiled component.
+workspace tests, LiteSVM execution, a no-keypair source rebuild that must match
+the committed SBF byte for byte, the WASI Preview 2 status component, mandatory
+component validation, Bash syntax, relay tests, and fixture consistency.
 
 See [`docs/REPRODUCE.md`](docs/REPRODUCE.md) for prerequisites, expected output,
 the verification map, and independent public-chain checks.
+
+To compare the repository evidence with live finalized Solana devnet state,
+without a wallet or signer:
+
+```powershell
+.\scripts\verify-devnet-live.ps1
+```
+
+This read-only check fetches the Program and ProgramData accounts, compares the
+on-chain executable prefix byte for byte with `fixtures/prazopay-v1.so`, decodes
+the recorded milestone, verifies all three lifecycle transactions, and checks
+that the Worker gained exactly one lamport.
 
 ## What the reproduction verifies
 
@@ -128,6 +139,8 @@ ZeroClaw configuration:
 programs/prazopay/          Anchor program and LiteSVM tests
 plugins/prazopay-status/    Read-only ZeroClaw WASM status tool
 clients/prazopay-devnet/    Three-path devnet lifecycle runner
+scripts/reproduce.*         Deterministic source-to-artifact reproduction
+scripts/verify-devnet-live.* Read-only live-chain verification
 scripts/zeroclaw-prazopay-monitor.sh
 fixtures/prazopay-v1.so     Exact SBF used by clean-room LiteSVM tests
 docs/PROTOCOL.md            State machine and invariants
@@ -142,10 +155,11 @@ docs/REPRODUCE.md           One-command clean-checkout instructions
 
 ## Safety boundary
 
-The one-command reproduction is local and does not deploy or submit a
-transaction. The linked public evidence was produced with isolated devnet test
-identities and one-lamport milestones. Nothing here deploys to mainnet, handles
-a real-value asset, exposes a signing interface to ZeroClaw, or submits a
-bounty entry. Publishing this source and its public devnet evidence does not
-grant access to any wallet, Discord bot, model provider, or deployment
-authority.
+The deterministic reproduction is local and does not deploy or submit a
+transaction. The live verifier makes finalized, read-only devnet RPC calls and
+has no signing interface. The linked write evidence was produced separately
+with isolated devnet test identities and one-lamport milestones. Nothing here
+deploys to mainnet, handles a real-value asset, exposes a signing interface to
+ZeroClaw, or submits a bounty entry. Publishing this source and its public
+devnet evidence does not grant access to any wallet, Discord bot, model
+provider, or deployment authority.

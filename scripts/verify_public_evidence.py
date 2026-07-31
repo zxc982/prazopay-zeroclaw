@@ -25,16 +25,27 @@ def require(condition: bool, message: str) -> None:
 
 
 def main() -> None:
+    deployment = load_json("devnet-deployment.json")
     lifecycle = load_json("devnet-lifecycle.json")
     fair = load_json("devnet-fair-lifecycle.json")
     monitor = load_json("devnet-active-monitor.json")
 
+    require(deployment["cluster"] == "devnet", "baseline deployment cluster")
     require(lifecycle["cluster"] == "devnet", "lifecycle cluster")
     require(fair["cluster"] == "devnet", "fair lifecycle cluster")
     require(monitor["cluster"] == "devnet", "monitor cluster")
+    require(deployment["program_id"] == PROGRAM_ID, "baseline deployment program ID")
     require(lifecycle["program_id"] == PROGRAM_ID, "lifecycle program ID")
     require(fair["program"]["program_id"] == PROGRAM_ID, "fair lifecycle program ID")
     require(monitor["program_id"] == PROGRAM_ID, "monitor program ID")
+    require(
+        deployment["local_sbf_sha256"] == deployment["deployed_sbf_sha256"],
+        "baseline deployment hash match",
+    )
+    require(
+        deployment["confirmation_status"] == "finalized",
+        "baseline deployment finality",
+    )
 
     sbf = (FIXTURES / "prazopay-v1.so").read_bytes()
     require(hashlib.sha256(sbf).hexdigest() == SBF_SHA256, "SBF hash")

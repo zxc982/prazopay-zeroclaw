@@ -19,3 +19,7 @@ tests. Its SHA-256 is
 matching the deployed prefix recorded in `devnet-deployment.json` and
 `docs/DEVNET_EVIDENCE.md`. It contains executable bytecode only, not deployment authority
 or wallet material.
+
+Run `scripts/verify-devnet-live.ps1` on Windows or
+`scripts/verify-devnet-live.sh` on Linux to compare these files against
+finalized Solana devnet state without a wallet or signer.

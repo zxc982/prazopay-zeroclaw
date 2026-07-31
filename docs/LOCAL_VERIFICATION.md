@@ -49,11 +49,13 @@ The suite checks that:
 The clean-checkout suite:
 
 1. runs all Rust workspace tests, including transaction-level LiteSVM cases;
-2. loads the exact committed devnet SBF in the execution tests;
-3. compiles `prazopay-status` for `wasm32-wasip2`;
-4. validates that component when `wasm-tools` is available;
-5. runs the relay's Python tests and Bash syntax checks; and
-6. verifies consistency across the public evidence fixtures.
+2. rebuilds the public program source without a deployment keypair and requires
+   byte-for-byte equality with the committed devnet SBF;
+3. loads that exact committed SBF in the execution tests;
+4. compiles `prazopay-status` for `wasm32-wasip2`;
+5. requires `wasm-tools` validation of that component;
+6. runs the relay and live-verifier Python tests plus Bash syntax checks; and
+7. verifies consistency across the public evidence fixtures.
 
 The committed SBF is
 [`fixtures/prazopay-v1.so`](../fixtures/prazopay-v1.so):
@@ -64,7 +66,8 @@ The committed SBF is
 | Length | `216936` bytes |
 | SHA-256 | `b792b9099410354b8f940bb7fa9aef4bbfdb8f26b51161c5a5942884199d5bf2` |
 
-That hash matches the deployed program prefix recorded in
+That hash matches the rebuilt source output and the deployed program prefix
+recorded in
 [`fixtures/devnet-fair-lifecycle.json`](../fixtures/devnet-fair-lifecycle.json).
 
 ## Optional deployment-workspace check
@@ -83,3 +86,9 @@ for clean-checkout reproduction.
 
 For public deployment, lifecycle, and real ZeroClaw evidence, see
 [`DEVNET_EVIDENCE.md`](DEVNET_EVIDENCE.md).
+
+For live, finalized, read-only comparison against Solana devnet, run:
+
+```powershell
+.\scripts\verify-devnet-live.ps1
+```
