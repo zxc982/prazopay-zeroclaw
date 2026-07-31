@@ -24,48 +24,28 @@ the original funder.
 
 ```mermaid
 stateDiagram-v2
-    direction LR
+    direction TB
 
-    state "CREATE<br/>Funder signs and locks SOL" as Create
-    state "OPEN<br/>Waiting for Worker delivery" as Open
-    state "REVIEW<br/>On-chain status: SUBMITTED" as Review
-    state "CLAIM GRACE<br/>On-chain status remains SUBMITTED" as Grace
-    state "PAID<br/>Escrow releases only to immutable Worker" as Paid
-    state "REFUNDED<br/>Escrow returns only to original Funder" as Refunded
+    state "OPEN\nEscrow funded; waiting for delivery" as Open
+    state "SUBMITTED\nFunder review window" as Review
+    state "CLAIM GRACE\nStatus remains SUBMITTED" as Grace
+    state "PAID\nSOL released only to immutable Worker" as Paid
+    state "REFUNDED\nSOL returned only to original Funder" as Refunded
 
-    [*] --> Create
+    [*] --> Open: Funder creates milestone\nand locks SOL
 
-    Create --> Open: Commit parties, amount, terms hash,<br/>deadlines and acceptance policy
+    Open --> Review: Worker calls submit_delivery\nbefore active due_at
+    Open --> Refunded: No pending delivery after due_at\nAnyone calls refund_expired
 
-    Open --> Review: Worker signs submit_delivery<br/>before active due_at
-    Open --> Refunded: No pending delivery after due_at<br/>Anyone calls refund_expired
-
-    Review --> Paid: Funder signs approve_milestone
-    Review --> Open: Funder signs request_revision<br/>Fresh delivery window; maximum 3
-    Review --> Grace: Review deadline expires<br/>No automatic payout
+    Review --> Paid: Funder calls approve_milestone
+    Review --> Open: Funder calls request_revision\nFresh delivery window; maximum 3
+    Review --> Grace: Review deadline expires\nNo automatic payout
 
     Grace --> Paid: Funder approves during grace
-    Grace --> Paid: After claimable_at<br/>Anyone calls settle_after_review
+    Grace --> Paid: After claimable_at\nAnyone calls settle_after_review
 
-    Paid --> [*]: One SUCCESS Discord card<br/>Monitoring stops
-    Refunded --> [*]: One FAILED Discord card<br/>Monitoring stops
-
-    note right of Create
-        ZeroClaw receives no wallet key
-        and has no signing authority.
-    end note
-
-    note right of Grace
-        ZeroClaw reads finalized state
-        and sends sparse alerts:
-        first delay, 30 minutes,
-        2 hours, then daily.
-    end note
-
-    note right of Paid
-        A permissionless caller cannot
-        change the payment recipient.
-    end note
+    Paid --> [*]: One SUCCESS Discord card\nThen monitoring stops
+    Refunded --> [*]: One FAILED Discord card\nThen monitoring stops
 ```
 
 ZeroClaw observes finalized Solana state and reports the responsible role and next permitted action. Human wallets retain funding, delivery, approval, and revision authority.
