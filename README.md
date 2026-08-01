@@ -2,9 +2,6 @@
 
 **Deadline-native milestone escrow with proactive ZeroClaw operations.**
 
-[**▶ Watch the PrazoPay live devnet demo on YouTube →**](https://youtu.be/Jy_S5nCCiG0)
-
-
 [![CI](https://github.com/zxc982/prazopay-zeroclaw/actions/workflows/ci.yml/badge.svg)](https://github.com/zxc982/prazopay-zeroclaw/actions/workflows/ci.yml)
 
 PrazoPay turns a freelance milestone into an immutable Solana state machine.
@@ -29,6 +26,9 @@ original Funder.
 flowchart TB
     Start((Start))
 
+    Proposed["PROPOSED AGREEMENT<br/>Funder commits terms<br/>No milestone funds locked"]
+    Accepted["ACCEPTED AGREEMENT<br/>Named Worker signs<br/>Fresh funding window starts"]
+    Unfunded["UNFUNDED CLOSED<br/>Rejected or time-expired<br/>No Milestone created"]
     Open["OPEN<br/>Escrow funded<br/>Waiting for Worker delivery"]
     Review["SUBMITTED<br/>Funder review window"]
     Grace["CLAIM GRACE<br/>Status remains SUBMITTED<br/>No automatic payout"]
@@ -41,7 +41,13 @@ flowchart TB
 
     End((Closed))
 
-    Start -->|"Funder creates milestone<br/>and locks SOL"| Open
+    Start -->|"Funder signs propose_agreement"| Proposed
+
+    Proposed -->|"Worker signs accept_agreement<br/>before proposal expiry"| Accepted
+    Proposed -->|"Worker rejects or<br/>proposal expires"| Unfunded
+
+    Accepted -->|"Funder calls fund_accepted_agreement<br/>inside the funding window"| Open
+    Accepted -->|"Funding window expires"| Unfunded
 
     Open -->|"Worker calls submit_delivery<br/>before active due_at"| Review
     Open -->|"No pending delivery after due_at<br/>Anyone calls refund_expired"| Refunded
@@ -58,11 +64,21 @@ flowchart TB
     Paid --> Success
     Refunded --> Failed
 
+    Unfunded --> End
     Success --> End
     Failed --> End
 ```
 
-ZeroClaw observes every stage through finalized, read-only Solana RPC calls and reports only the responsible role and currently permitted action. It never receives a wallet key or signing authority. Delay alerts occur at the first delay, 30 minutes, 2 hours, and then once per day. After one acknowledged terminal notification, monitoring stops.
+The Agreement commits the parties, amount, terms hash, windows, and explicit
+silence policy, but it never holds the milestone amount. Only a Worker-accepted
+Agreement can be funded; that atomic funding transaction creates the Milestone,
+locks the exact SOL amount, and starts the complete delivery window.
+
+ZeroClaw observes every stage through finalized, read-only Solana RPC calls and
+reports only the responsible role and currently permitted action. It never
+receives a wallet key or signing authority. Delay alerts occur at the first
+delay, 30 minutes, 2 hours, and then once per day. After one acknowledged
+terminal notification, monitoring stops.
 
 ## Why this is not another payment bot
 
@@ -203,6 +219,8 @@ fixtures/prazopay-v2.so     Exact currently deployed v2 SBF
 docs/PROTOCOL.md            v2 Agreement and Milestone state machines
 docs/COMMUNICATION.md       Signed communication commitments and Discord role
 docs/THREAT_MODEL.md        Assets, trust boundary, threats, controls
+docs/PROMPT_INJECTION_TRANSCRIPT.md
+                            Actual locked-down ZeroClaw injection transcript
 docs/COMPETITIVE_POSITIONING.md
 docs/TEST_SCENARIOS.md      Normal, boundary, adversarial, and monitor suites
 docs/ACTIVE_MONITOR.md      Proactive devnet-to-Discord evidence
@@ -213,11 +231,22 @@ docs/REPRODUCE.md           One-command clean-checkout instructions
 
 ## Safety boundary
 
+**Custody tier: T0 (read-only ZeroClaw).** Human wallets remain the only
+role-specific signers, and the PrazoPay program remains the settlement
+authority. The two allowlisted WASM tools expose fixed devnet RPC reads, and
+their manifests grant only `http_client`; no wallet, signer, transaction
+builder, or broadcaster is exposed to the model.
+
 The deterministic reproduction is local and does not deploy or submit a
 transaction. The live verifier makes finalized, read-only devnet RPC calls and
 has no signing interface. The linked write evidence was produced separately
 with isolated devnet test identities and one-lamport milestones. Nothing here
 deploys to mainnet, handles a real-value asset, exposes a signing interface to
-ZeroClaw, or submits a bounty entry. Publishing this source and its public
-devnet evidence does not grant access to any wallet, Discord bot, model
-provider, or deployment authority.
+ZeroClaw, or grants access to any wallet, Discord bot, model provider, or
+deployment authority.
+
+See the [actual prompt-injection transcript](docs/PROMPT_INJECTION_TRANSCRIPT.md)
+for the captured ZeroClaw request and response, the runtime allowlist, and the
+LiteSVM recipient-substitution tests. The transcript treats the model as
+untrusted: security comes from absent signing capability and on-chain account
+constraints, not from assuming that an LLM will always refuse.

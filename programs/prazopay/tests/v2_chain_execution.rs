@@ -93,12 +93,13 @@ fn read_milestone(svm: &LiteSVM, address: &Pubkey) -> Milestone {
 
 #[test]
 #[ignore = "requires a locally built candidate SBF via PRAZOPAY_V2_SBF"]
-fn worker_acceptance_is_required_before_funding_and_payment() {
+fn worker_acceptance_and_immutable_recipient_are_enforced_before_payment() {
     let mut svm = new_svm();
     let funder = Keypair::new();
     let worker = Keypair::new();
     let trigger = Keypair::new();
-    for key in [&funder, &worker, &trigger] {
+    let attacker = Keypair::new();
+    for key in [&funder, &worker, &trigger, &attacker] {
         svm.airdrop(&key.pubkey(), INITIAL_BALANCE).unwrap();
     }
 
@@ -194,11 +195,35 @@ fn worker_acceptance_is_required_before_funding_and_payment() {
     assert_eq!(submitted.status, MilestoneStatus::Submitted);
     assert_eq!(submitted.evidence_hash, EVIDENCE_HASH);
 
-    let worker_before = svm.get_balance(&worker.pubkey()).unwrap();
     set_time(
         &mut svm,
         submitted.submitted_at + i64::from(REVIEW_WINDOW_SECS) * 2,
     );
+    let worker_before = svm.get_balance(&worker.pubkey()).unwrap();
+    let attacker_before = svm.get_balance(&attacker.pubkey()).unwrap();
+    let redirected_settlement = Instruction::new_with_bytes(
+        prazopay::id(),
+        &prazopay::instruction::SettleAfterReview {}.data(),
+        prazopay::accounts::SettleAfterReview {
+            milestone,
+            worker: attacker.pubkey(),
+            trigger: trigger.pubkey(),
+        }
+        .to_account_metas(None),
+    );
+    let redirected_attempt = transaction(&svm, redirected_settlement, &trigger);
+    assert!(svm.send_transaction(redirected_attempt).is_err());
+    assert_eq!(
+        read_milestone(&svm, &milestone).status,
+        MilestoneStatus::Submitted
+    );
+    assert_eq!(svm.get_balance(&worker.pubkey()).unwrap(), worker_before);
+    assert_eq!(
+        svm.get_balance(&attacker.pubkey()).unwrap(),
+        attacker_before
+    );
+    svm.expire_blockhash();
+
     let settle = Instruction::new_with_bytes(
         prazopay::id(),
         &prazopay::instruction::SettleAfterReview {}.data(),
