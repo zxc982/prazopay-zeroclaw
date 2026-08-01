@@ -93,6 +93,30 @@ wasm-tools strip --all \
   "$committed_agreement_component" \
   -o "$committed_agreement_canonical"
 
+if [[ -n "${PRAZOPAY_WASM_ARTIFACT_DIR:-}" ]]; then
+  mkdir -p "$PRAZOPAY_WASM_ARTIFACT_DIR"
+  cp "$component" "$PRAZOPAY_WASM_ARTIFACT_DIR/rebuilt-status.raw.wasm"
+  cp "$committed_component" "$PRAZOPAY_WASM_ARTIFACT_DIR/committed-status.raw.wasm"
+  cp "$agreement_component" "$PRAZOPAY_WASM_ARTIFACT_DIR/rebuilt-agreement.raw.wasm"
+  cp \
+    "$committed_agreement_component" \
+    "$PRAZOPAY_WASM_ARTIFACT_DIR/committed-agreement.raw.wasm"
+  cp \
+    "$rebuilt_status_canonical" \
+    "$PRAZOPAY_WASM_ARTIFACT_DIR/rebuilt-status.canonical.wasm"
+  cp \
+    "$committed_status_canonical" \
+    "$PRAZOPAY_WASM_ARTIFACT_DIR/committed-status.canonical.wasm"
+  cp \
+    "$rebuilt_agreement_canonical" \
+    "$PRAZOPAY_WASM_ARTIFACT_DIR/rebuilt-agreement.canonical.wasm"
+  cp \
+    "$committed_agreement_canonical" \
+    "$PRAZOPAY_WASM_ARTIFACT_DIR/committed-agreement.canonical.wasm"
+  sha256sum "$PRAZOPAY_WASM_ARTIFACT_DIR"/*.wasm \
+    >"$PRAZOPAY_WASM_ARTIFACT_DIR/sha256sums.txt"
+fi
+
 cmp "$rebuilt_status_canonical" "$committed_status_canonical"
 cmp "$rebuilt_agreement_canonical" "$committed_agreement_canonical"
 echo "WASM_STATUS_CANONICAL_SHA256=$(sha256sum "$rebuilt_status_canonical" | awk '{print $1}')"
