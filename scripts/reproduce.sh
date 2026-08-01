@@ -6,9 +6,27 @@ cd "$project_root"
 
 cache_root="${XDG_CACHE_HOME:-$HOME/.cache}"
 test_target="$cache_root/prazopay-target"
-wasm_target="$cache_root/prazopay-wasm-target"
 sbf_target="$cache_root/prazopay-sbf-target"
 sbf_output="$cache_root/prazopay-sbf-output"
+
+temp_root="${TMPDIR:-/tmp}"
+wasm_target="$(mktemp -d "$temp_root/prazopay-wasm-target.XXXXXX")"
+wasm_compare="$(mktemp -d "$temp_root/prazopay-wasm-compare.XXXXXX")"
+
+cleanup_wasm_temp() {
+  case "$wasm_target" in
+    "$temp_root"/prazopay-wasm-target.*)
+      rm -rf -- "$wasm_target"
+      ;;
+  esac
+  case "$wasm_compare" in
+    "$temp_root"/prazopay-wasm-compare.*)
+      rm -rf -- "$wasm_compare"
+      ;;
+  esac
+}
+
+trap cleanup_wasm_temp EXIT
 
 require_command() {
   if ! command -v "$1" >/dev/null 2>&1; then
@@ -51,10 +69,34 @@ RUSTUP_TOOLCHAIN=1.97.1 \
 
 component="$wasm_target/wasm32-wasip2/release/prazopay_status.wasm"
 agreement_component="$wasm_target/wasm32-wasip2/release/prazopay_agreement_status.wasm"
-cmp "$component" plugins/prazopay-status/prazopay-status.wasm
-cmp \
-  "$agreement_component" \
-  plugins/prazopay-agreement-status/prazopay-agreement-status.wasm
+
+committed_component="plugins/prazopay-status/prazopay-status.wasm"
+committed_agreement_component="plugins/prazopay-agreement-status/prazopay-agreement-status.wasm"
+
+wasm-tools validate "$component"
+wasm-tools validate "$agreement_component"
+wasm-tools validate "$committed_component"
+wasm-tools validate "$committed_agreement_component"
+
+rebuilt_status_canonical="$wasm_compare/rebuilt-status.wasm"
+committed_status_canonical="$wasm_compare/committed-status.wasm"
+rebuilt_agreement_canonical="$wasm_compare/rebuilt-agreement.wasm"
+committed_agreement_canonical="$wasm_compare/committed-agreement.wasm"
+
+# Rust components may contain host-specific, non-semantic custom sections.
+# Strip every custom section from both sides before the reproducibility check;
+# the executable component structure and code remain covered byte for byte.
+wasm-tools strip --all "$component" -o "$rebuilt_status_canonical"
+wasm-tools strip --all "$committed_component" -o "$committed_status_canonical"
+wasm-tools strip --all "$agreement_component" -o "$rebuilt_agreement_canonical"
+wasm-tools strip --all \
+  "$committed_agreement_component" \
+  -o "$committed_agreement_canonical"
+
+cmp "$rebuilt_status_canonical" "$committed_status_canonical"
+cmp "$rebuilt_agreement_canonical" "$committed_agreement_canonical"
+echo "WASM_STATUS_CANONICAL_SHA256=$(sha256sum "$rebuilt_status_canonical" | awk '{print $1}')"
+echo "WASM_AGREEMENT_CANONICAL_SHA256=$(sha256sum "$rebuilt_agreement_canonical" | awk '{print $1}')"
 echo "WASM_SOURCE_ARTIFACT=PASS components=2"
 mkdir -p "$sbf_output"
 CARGO_TARGET_DIR="$sbf_target" \
@@ -84,8 +126,6 @@ printf '%s  %s\n' \
   'fixtures/prazopay-v1.so' | sha256sum --check -
 echo "DEPLOYED_V1_FIXTURE_HASH=PASS"
 
-wasm-tools validate "$component"
-wasm-tools validate "$agreement_component"
 echo "WASM_VALIDATE=PASS components=2"
 
 bash -n scripts/zeroclaw-prazopay-monitor.sh

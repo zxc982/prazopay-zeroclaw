@@ -71,8 +71,8 @@ bash ./scripts/reproduce.sh
 The final line is `REPRODUCE=PASS`. The command checks formatting, all Rust
 workspace tests, a fresh v2 SBF build, the complete Worker-acceptance lifecycle
 against that SBF in LiteSVM, the WASI Preview 2 status component, mandatory
-component validation, Bash syntax, relay tests, and historical v1 fixture
-consistency.
+component validation, cross-environment canonical WASM comparison, Bash syntax,
+relay tests, and historical v1 fixture consistency.
 
 See [`docs/REPRODUCE.md`](docs/REPRODUCE.md) for prerequisites, expected output,
 the verification map, and independent public-chain checks.
