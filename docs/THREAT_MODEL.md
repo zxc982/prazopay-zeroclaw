@@ -60,6 +60,11 @@ quality of human work.
 | T26 | RPC/model outage is silently hidden | Relay emits no chain conclusion, but sends infrastructure-only degraded/recovered cards at first failure, 30 minutes, 2 hours, then daily |
 | T27 | Agreement monitor stops at funding before Milestone monitoring starts | Agreement stores the exact funded Milestone PDA; the same read-only journey heartbeat conditionally calls the Milestone tool and closes only at a true terminal outcome |
 
+The [prompt-injection safety transcript](PROMPT_INJECTION_TRANSCRIPT.md)
+captures an actual locked-down ZeroClaw request and response plus LiteSVM tests
+for substituted Worker acceptance and redirected permissionless settlement. It
+does not treat model refusal as an authorization boundary.
+
 ## Known residual risks
 
 - A malicious funder can request a revision with an unhelpful feedback hash
@@ -72,8 +77,8 @@ quality of human work.
 - Upgrade authority remains a governance risk until the deployment policy is
   frozen and documented.
 - ZeroClaw reported application-layer security because no OS sandbox backend
-  was available. The dedicated heartbeat therefore retains only the read-only
-  two read-only PrazoPay status tools and no signing surface.
+  was available. The dedicated heartbeat therefore retains only the two
+  read-only PrazoPay status tools and no signing surface.
 - Notifications are operational hints with at-least-once delivery. They do not
   prove that Discord displayed a message or that a human read it. A crash after
   Discord accepts a send but before the relay commits its event ID can repeat
