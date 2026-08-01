@@ -189,8 +189,11 @@ The program validation rules were not weakened.
 - [`../fixtures/devnet-v2-lifecycle.json`](../fixtures/devnet-v2-lifecycle.json)
 - [`../fixtures/prazopay-v2.so`](../fixtures/prazopay-v2.so)
 
-The proactive no-prompt heartbeat and Discord delivery are documented
-separately in [`ACTIVE_MONITOR.md`](ACTIVE_MONITOR.md).
+The current v2 no-prompt journey design is documented in
+[`ACTIVE_MONITOR.md`](ACTIVE_MONITOR.md). Earlier v1 and v0 heartbeat and
+Discord runs are retained separately as
+[`history/V1_ACTIVE_MONITOR.md`](history/V1_ACTIVE_MONITOR.md) compatibility
+evidence, not as the current protocol.
 
 | File | SHA-256 |
 | --- | --- |
