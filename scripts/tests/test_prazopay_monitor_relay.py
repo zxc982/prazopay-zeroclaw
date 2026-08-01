@@ -155,11 +155,35 @@ class RelayTests(unittest.TestCase):
 
         correct = (
             "PrazoPay Agreement Proposal\n"
+            f"{RELAY.AGREEMENT_ACCEPTANCE_GUARD}\n"
+            f"{RELAY.SILENCE_POLICY_GUARD}\n"
             f"Explorer: {AGREEMENT_EXPLORER}\n"
             f"Event ID: {EVENT_ONE}"
         )
         self.assertEqual(self.processor.process(correct, CHANNEL)[0], 200)
         self.assertEqual(len(self.sent), 1)
+
+    def test_agreement_card_requires_explicit_acceptance_semantics(self):
+        missing_guard = (
+            "PrazoPay Agreement Proposal\n"
+            f"Explorer: {AGREEMENT_EXPLORER}\n"
+            f"Event ID: {EVENT_ONE}"
+        )
+        result = self.processor.process(missing_guard, CHANNEL)
+        self.assertEqual(result[0], 422)
+        self.assertIn("explicit Worker-signed acceptance", result[1])
+        self.assertEqual(self.sent, [])
+
+        missing_scope = (
+            "PrazoPay Agreement Accepted\n"
+            f"{RELAY.AGREEMENT_ACCEPTANCE_GUARD}\n"
+            f"Explorer: {AGREEMENT_EXPLORER}\n"
+            f"Event ID: {EVENT_ONE}"
+        )
+        result = self.processor.process(missing_scope, CHANNEL)
+        self.assertEqual(result[0], 422)
+        self.assertIn("Funder review", result[1])
+        self.assertEqual(self.sent, [])
 
     def test_rpc_failure_alerts_sparsely_then_recovers(self):
         failure = "NO_REPLY[FAIL]: RPC_NETWORK_FAILED"
