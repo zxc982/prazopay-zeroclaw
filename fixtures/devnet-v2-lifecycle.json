@@ -1,0 +1,57 @@
+{
+  "schema": "prazopay.devnet.v2-lifecycle.v1",
+  "cluster": "devnet",
+  "program": {
+    "program_id": "DjdT1wW8zEoK395yujT5ujBsDboBUFyx5LCfLBSwxAjm",
+    "programdata_address": "4qVQJLEipmRqcKYbEUnptxJ8aYbtBojryEDEHSzwf6BM",
+    "upgrade_authority": "9yZoUQRdQ13cZkf6nPb4apAV7S2pPkuwYUyDmTpM8c8g",
+    "deployed_slot": 480289270,
+    "upgrade_signature": "2tyAdkSNL7WfjzE31yoGSPCLuL2uCJWWip96LDATbHQCLqW7UWtFTG7RXWDnDiQhmQspWcCtP3rgZ1RuEfX9ZGpA",
+    "local_sbf_length": 286368,
+    "programdata_length": 286413,
+    "zero_padding_length": 45,
+    "sbf_sha256": "a54c676c98f526425ba77b54cfdb64a6ddddab2cf218d12f732dfa95bb4d8294"
+  },
+  "agreement": {
+    "address": "Cg3xWCC4SiCEshSLcMSt6GGWSpb25zAhv9iTXuuBXeaW",
+    "funder": "CkNmityXoeSFZmJErqDHKbMF5mgcwLqEKiXtxsFY6ZF8",
+    "worker": "F5M9qTSuXVipJY7Rd7ZG3oySxX7iuEfi5v55nPmtRmWw",
+    "task_id_sha256": "65dbc163d5ef36093826becc470440caeed057dfb176ba62bd6a454e6fe5883f",
+    "terms_sha256": "ad50e6c51dad66d7b4f7375408d70e4a3ab4151644c7b2753b3a840d3637fe24",
+    "amount_lamports": 1,
+    "delivery_window_secs": 3600,
+    "review_window_secs": 600,
+    "funding_window_secs": 900,
+    "proposal_lifetime_secs": 1800,
+    "proposal_expires_at": 1785533026,
+    "silence_acceptance": true,
+    "status": "funded",
+    "milestone": "Can5CgbqzVcH2rSJmPY8p73QYecAUcxdaFXFnYN2Qvvk"
+  },
+  "milestone": {
+    "address": "Can5CgbqzVcH2rSJmPY8p73QYecAUcxdaFXFnYN2Qvvk",
+    "funder": "CkNmityXoeSFZmJErqDHKbMF5mgcwLqEKiXtxsFY6ZF8",
+    "worker": "F5M9qTSuXVipJY7Rd7ZG3oySxX7iuEfi5v55nPmtRmWw",
+    "task_id_sha256": "65dbc163d5ef36093826becc470440caeed057dfb176ba62bd6a454e6fe5883f",
+    "terms_sha256": "ad50e6c51dad66d7b4f7375408d70e4a3ab4151644c7b2753b3a840d3637fe24",
+    "evidence_sha256": "e82580b4b7e438b5863173fdd6e68b4a920a20c4253ae3952cd8f16913b7065d",
+    "amount_lamports": 1,
+    "due_at": 1785534913,
+    "review_window_secs": 600,
+    "revision_count": 0,
+    "protocol_version": 2,
+    "status": "paid"
+  },
+  "transactions": {
+    "propose": "3PMLWgdYQFNTpX5EaqMXuSZeYu5wJj1tX98oNDyT4tVHqoXp74f1XpZHrfi4bKq6noFsjjct4HNtzRnx2jXGCEyW",
+    "accept": "4Jg6ZzySRszaiyHhiZoTNwAu7HQB22UDPEkvCh5fWc5NQ5rYTaj5knyoa7eaXyT7EHxFcYn4VHAQxWiUez5G5BuE",
+    "fund": "WYzqETBVnfP2aEtWuYkuuRcQqNRNUZcRywoV4P3Lo28QHgzWFFeLJjtJBWAp7tFKQhpVMnBxPxVLnhpdwefZx2N",
+    "submit": "5aKP68UxPxA24ib5sAd3jJDLHkpFHCufT2K2zu5t1SidExnMRN3XhHenQwbbthJmeY1EZ6kKNyqMZrMacg5NwE47",
+    "approve": "3gJaTe5sdqpXCruCnjWHrTqLyh5YtsygH9NWbsQmYkDrfZi9YDoHpcdHphvniuo6ZAmYrfGpDeHPUcc4rWaz78vd"
+  },
+  "worker_balance": {
+    "before_lamports": 4940007,
+    "after_lamports": 4940008,
+    "delta_lamports": 1
+  }
+}

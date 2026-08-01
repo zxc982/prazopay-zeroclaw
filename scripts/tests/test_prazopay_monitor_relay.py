@@ -22,6 +22,9 @@ MILESTONE = "ikUaYZUARH3KXK9y98MgfgSVsZJu3tcgHfgeKnCTTqB"
 CHANNEL = "1532408222730686565"
 EVENT_ONE = "prazopay:11111111111111111111111111111111"
 EVENT_TWO = "prazopay:22222222222222222222222222222222"
+AGREEMENT_EXPLORER = (
+    f"https://explorer.solana.com/address/{MILESTONE}?cluster=devnet"
+)
 
 
 class RelayTests(unittest.TestCase):
@@ -29,6 +32,7 @@ class RelayTests(unittest.TestCase):
         self.temporary = tempfile.TemporaryDirectory()
         self.sent = []
         self.disabled = 0
+        self.now = 1_000_000
         store = RELAY.StateStore(
             Path(self.temporary.name) / "delivery-state.json", MILESTONE
         )
@@ -41,7 +45,9 @@ class RelayTests(unittest.TestCase):
             self.disabled += 1
             return True
 
-        self.processor = RELAY.DeliveryProcessor(store, sender, disable, CHANNEL)
+        self.processor = RELAY.DeliveryProcessor(
+            store, sender, disable, CHANNEL, clock=lambda: self.now
+        )
 
     def tearDown(self):
         self.temporary.cleanup()
@@ -85,6 +91,29 @@ class RelayTests(unittest.TestCase):
         self.assertTrue(state["closed"])
         self.assertEqual(state["terminal_event_id"], EVENT_ONE)
 
+    def test_agreement_funding_keeps_journey_monitor_open_for_handoff(self):
+        funded = (
+            "PrazoPay Escrow Funded\n"
+            "Event: AGREEMENT_FUNDED\n"
+            f"Explorer: {AGREEMENT_EXPLORER}\n"
+            f"Event ID: {EVENT_ONE}"
+        )
+        self.assertEqual(self.processor.process(funded, CHANNEL)[0], 200)
+        self.assertEqual(len(self.sent), 1)
+        self.assertEqual(self.disabled, 0)
+        self.assertFalse(self.processor.state_store.load()["closed"])
+
+    def test_agreement_expiry_closes_journey_monitor(self):
+        terminal = (
+            "PrazoPay Agreement Closed\n"
+            "Event: AGREEMENT_FUNDING_WINDOW_EXPIRED\n"
+            f"Explorer: {AGREEMENT_EXPLORER}\n"
+            f"Event ID: {EVENT_ONE}"
+        )
+        self.assertEqual(self.processor.process(terminal, CHANNEL)[0], 200)
+        self.assertEqual(self.disabled, 1)
+        self.assertTrue(self.processor.state_store.load()["closed"])
+
     def test_closed_state_retries_heartbeat_disable_without_resending(self):
         disable_results = iter([False, True])
         disable_attempts = []
@@ -113,12 +142,79 @@ class RelayTests(unittest.TestCase):
         self.assertEqual(result[0], 422)
         self.assertEqual(self.sent, [])
 
-    def test_quiet_failure_output_is_suppressed(self):
-        result = self.processor.process(
-            "NO_REPLY[FAIL]: RPC_NETWORK_FAILED", CHANNEL
+    def test_agreement_card_requires_exact_explorer_url(self):
+        wrong = (
+            "PrazoPay Agreement Proposal\n"
+            "Explorer: https://explorer.solana.com/address/not-the-agreement?cluster=devnet\n"
+            f"Event ID: {EVENT_ONE}"
         )
-        self.assertEqual(result[0], 200)
+        result = self.processor.process(wrong, CHANNEL)
+        self.assertEqual(result[0], 422)
+        self.assertIn("Explorer URL", result[1])
         self.assertEqual(self.sent, [])
+
+        correct = (
+            "PrazoPay Agreement Proposal\n"
+            f"Explorer: {AGREEMENT_EXPLORER}\n"
+            f"Event ID: {EVENT_ONE}"
+        )
+        self.assertEqual(self.processor.process(correct, CHANNEL)[0], 200)
+        self.assertEqual(len(self.sent), 1)
+
+    def test_rpc_failure_alerts_sparsely_then_recovers(self):
+        failure = "NO_REPLY[FAIL]: RPC_NETWORK_FAILED"
+        self.assertEqual(self.processor.process(failure, CHANNEL)[0], 200)
+        self.assertEqual(len(self.sent), 1)
+        self.assertIn("MONITOR_RPC_DEGRADED", self.sent[-1][0])
+        self.assertIn("Reminder stage: first", self.sent[-1][0])
+
+        self.now += 10 * 60
+        self.assertEqual(self.processor.process(failure, CHANNEL)[0], 200)
+        self.assertEqual(len(self.sent), 1)
+        self.now += 20 * 60
+        self.assertEqual(self.processor.process(failure, CHANNEL)[0], 200)
+        self.assertEqual(len(self.sent), 2)
+        self.assertIn("Reminder stage: 30m", self.sent[-1][0])
+        self.now = 1_000_000 + 2 * 60 * 60
+        self.assertEqual(self.processor.process(failure, CHANNEL)[0], 200)
+        self.assertEqual(len(self.sent), 3)
+        self.assertIn("Reminder stage: 2h", self.sent[-1][0])
+        self.now = 1_000_000 + 24 * 60 * 60
+        self.assertEqual(self.processor.process(failure, CHANNEL)[0], 200)
+        self.assertEqual(len(self.sent), 4)
+        self.assertIn("Reminder stage: day_1", self.sent[-1][0])
+
+        self.assertEqual(self.processor.process("NO_REPLY", CHANNEL)[0], 200)
+        self.assertEqual(len(self.sent), 5)
+        self.assertIn("MONITOR_RPC_RECOVERED", self.sent[-1][0])
+        self.assertNotIn("monitor_health", self.processor.state_store.load())
+
+    def test_rpc_alert_delivery_failure_retries_same_stage(self):
+        attempts = []
+
+        def flaky_sender(content, recipient):
+            attempts.append((content, recipient))
+            return len(attempts) > 1
+
+        self.processor.sender = flaky_sender
+        failure = "NO_REPLY[FAIL]: PRAZOPAY_STATUS_UNAVAILABLE"
+        self.assertEqual(self.processor.process(failure, CHANNEL)[0], 503)
+        self.assertEqual(self.processor.process(failure, CHANNEL)[0], 200)
+        self.assertEqual(len(attempts), 2)
+        self.assertEqual(attempts[0][0], attempts[1][0])
+
+    def test_actionable_duplicate_after_outage_emits_one_recovery(self):
+        content = f"PrazoPay Active Alert\nEvent ID: {EVENT_ONE}"
+        self.assertEqual(self.processor.process(content, CHANNEL)[0], 200)
+        self.assertEqual(
+            self.processor.process(
+                "NO_REPLY[FAIL]: PRAZOPAY_STATUS_UNAVAILABLE", CHANNEL
+            )[0],
+            200,
+        )
+        self.assertEqual(self.processor.process(content, CHANNEL)[0], 200)
+        self.assertEqual(len(self.sent), 3)
+        self.assertIn("MONITOR_RPC_RECOVERED", self.sent[-1][0])
 
     def test_wrong_recipient_is_rejected(self):
         result = self.processor.process(
@@ -126,6 +222,19 @@ class RelayTests(unittest.TestCase):
             "1532408222730686566",
         )
         self.assertEqual(result[0], 400)
+        self.assertEqual(self.sent, [])
+
+        quiet = self.processor.process("NO_REPLY", "1532408222730686566")
+        self.assertEqual(quiet[0], 400)
+        failure = self.processor.process(
+            "NO_REPLY[FAIL]: RPC_NETWORK_FAILED", "1532408222730686566"
+        )
+        self.assertEqual(failure[0], 400)
+        self.assertEqual(self.sent, [])
+
+    def test_malformed_quiet_control_fails_closed(self):
+        result = self.processor.process("NO_REPLY maybe", CHANNEL)
+        self.assertEqual(result[0], 422)
         self.assertEqual(self.sent, [])
 
     def test_corrupt_delivery_state_fails_closed(self):

@@ -1,0 +1,99 @@
+diff --git a/crates/zeroclaw-tool-call-parser/src/lib.rs b/crates/zeroclaw-tool-call-parser/src/lib.rs
+index 847277f..485efeb 100644
+--- a/crates/zeroclaw-tool-call-parser/src/lib.rs
++++ b/crates/zeroclaw-tool-call-parser/src/lib.rs
+@@ -1813,6 +1813,61 @@ fn parse_glm_shortened_body(body: &str) -> Option<ParsedToolCall> {
+     None
+ }
+ 
++// DeepSeek-compatible XML form:
++// `<tool_call name="tool_name">{"param":"value"}</tool_call>`.
++// Keep this deliberately narrow: the name must be a simple tool identifier and
++// the body must be one complete JSON object. Arbitrary JSON outside this
++// explicit envelope is never promoted to a tool call.
++fn parse_named_attribute_tool_calls(response: &str) -> Option<(String, Vec<ParsedToolCall>)> {
++    const OPEN: &str = "<tool_call name=\"";
++    const CLOSE: &str = "</tool_call>";
++
++    let mut text_parts = Vec::new();
++    let mut calls = Vec::new();
++    let mut remaining = response;
++
++    while let Some(start) = remaining.find(OPEN) {
++        let before = &remaining[..start];
++        if !before.trim().is_empty() {
++            text_parts.push(before.trim().to_string());
++        }
++
++        let after_marker = &remaining[start + OPEN.len()..];
++        let name_end = after_marker.find("\">")?;
++        let raw_name = &after_marker[..name_end];
++        if raw_name.is_empty()
++            || !raw_name
++                .chars()
++                .all(|ch| ch.is_ascii_alphanumeric() || matches!(ch, '_' | '-' | '.'))
++        {
++            return None;
++        }
++
++        let after_open = &after_marker[name_end + 2..];
++        let close_idx = after_open.find(CLOSE)?;
++        let arguments =
++            serde_json::from_str::<serde_json::Value>(after_open[..close_idx].trim()).ok()?;
++        if !arguments.is_object() {
++            return None;
++        }
++
++        calls.push(ParsedToolCall {
++            name: map_tool_name_alias(raw_name).to_string(),
++            arguments,
++            tool_call_id: None,
++        });
++        remaining = &after_open[close_idx + CLOSE.len()..];
++    }
++
++    if calls.is_empty() {
++        return None;
++    }
++    if !remaining.trim().is_empty() {
++        text_parts.push(remaining.trim().to_string());
++    }
++    Some((text_parts.join("\n"), calls))
++}
++
+ // ── Tool-Call Parsing ─────────────────────────────────────────────────────
+ // LLM responses may contain tool calls in multiple formats depending on
+ // the model_provider. Parsing follows a priority chain:
+@@ -1873,6 +1928,10 @@ pub fn parse_tool_calls(response: &str) -> (String, Vec<ParsedToolCall>) {
+         return (minimax_text, minimax_calls);
+     }
+ 
++    if let Some((text, calls)) = parse_named_attribute_tool_calls(response) {
++        return (text, calls);
++    }
++
+     // Fall back to XML-style tool-call tag parsing.
+     while let Some((start, open_tag)) = find_first_tag(remaining, &TOOL_CALL_OPEN_TAGS) {
+         // Everything before the tag is text
+@@ -2681,6 +2740,21 @@ I will now call the tool with this payload:
+         );
+     }
+ 
++    #[test]
++    fn parse_tool_calls_handles_named_attribute_with_json_arguments() {
++        let response = r#"<tool_call name="prazopay_agreement_status">
++{"cluster":"devnet","agreement":"ES959C2bS8dyk74RfuQmdP47gPJmdbjuVfXgwzKWvFFH","alert_before_secs":300,"poll_interval_secs":180}
++</tool_call>"#;
++
++        let (text, calls) = parse_tool_calls(response);
++        assert!(text.is_empty());
++        assert_eq!(calls.len(), 1);
++        assert_eq!(calls[0].name, "prazopay_agreement_status");
++        assert_eq!(calls[0].arguments["cluster"], "devnet");
++        assert_eq!(calls[0].arguments["alert_before_secs"], 300);
++        assert_eq!(calls[0].arguments["poll_interval_secs"], 180);
++    }
++
+     #[test]
+     fn parse_tool_calls_handles_tool_call_inline_attributes_with_send_message_alias() {
+         let response = r#"<tool_call>send_message channel="user_channel" message="Hello! How can I assist you today?"</tool_call>"#;

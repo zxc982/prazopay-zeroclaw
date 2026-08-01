@@ -17,6 +17,11 @@ discriminator and exact binary length, decodes the milestone, obtains Solana
 block time, and returns role-specific next actions plus a deterministic
 `monitor` decision.
 
+It decodes v0, deployed v1, and deployed v2 Milestones. A v2 Milestone
+reports `worker_signed_silence_acceptance`: the Worker accepted the committed
+terms before funding was allowed. The currently linked public devnet evidence
+remains v1 until an explicitly authorized v2 deployment occurs.
+
 The monitor decision contains:
 
 - `should_notify` and `continue_monitoring`;
@@ -39,11 +44,11 @@ Other polls are quiet. Event IDs are bound to the lifecycle state and reminder
 stage. The relay commits an event ID only after a successful Discord send and
 suppresses that ID on later polls and after restarts.
 
-For a v1 terminal state, the tool deliberately returns the same final event on
-every poll and keeps `continue_monitoring = true`. This is a retry contract,
-not an instruction to post duplicates: the relay delivers the final event once,
-persists the acknowledgement, closes that milestone, and disables the
-heartbeat. A terminal event therefore cannot disappear merely because the
+For a v1 or v2 terminal state, the tool deliberately returns the same final
+event on every poll and keeps `continue_monitoring = true`. This is a retry
+contract, not an instruction to post duplicates: the relay delivers the final
+event once, persists the acknowledgement, closes that milestone, and disables
+the heartbeat. A terminal event therefore cannot disappear merely because the
 daemon or provider was unavailable during a short notification window.
 
 The result is advisory. The Anchor program remains the only settlement

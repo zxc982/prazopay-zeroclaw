@@ -1,10 +1,12 @@
 use anchor_lang::prelude::Pubkey;
 use prazopay::{
     constants::{
-        MAX_CLAIM_GRACE_SECS, MAX_MILESTONE_DURATION_SECS, MAX_REVIEW_WINDOW_SECS, MAX_REVISIONS,
+        MAX_CLAIM_GRACE_SECS, MAX_FUNDING_WINDOW_SECS, MAX_MILESTONE_DURATION_SECS,
+        MAX_PROPOSAL_LIFETIME_SECS, MAX_REVIEW_WINDOW_SECS, MAX_REVISIONS,
+        MIN_DELIVERY_WINDOW_SECS, MIN_FUNDING_WINDOW_SECS, MIN_PROPOSAL_LIFETIME_SECS,
         MIN_REVIEW_WINDOW_SECS,
     },
-    state::{Milestone, MilestoneStatus},
+    state::{Agreement, AgreementStatus, Milestone, MilestoneStatus},
 };
 
 const CREATED_AT: i64 = 1_000;
@@ -39,6 +41,250 @@ fn milestone() -> Milestone {
     .unwrap()
 }
 
+fn agreement() -> Agreement {
+    Agreement::new(
+        funder(),
+        worker(),
+        [4; 32],
+        [5; 32],
+        AMOUNT,
+        3_600,
+        MIN_REVIEW_WINDOW_SECS,
+        600,
+        600,
+        true,
+        253,
+        CREATED_AT,
+    )
+    .unwrap()
+}
+
+#[test]
+fn agreement_proposal_freezes_terms_before_funding() {
+    let agreement = agreement();
+
+    assert_eq!(Agreement::INIT_SPACE, 207);
+    assert_eq!(agreement.funder, funder());
+    assert_eq!(agreement.worker, worker());
+    assert_eq!(agreement.task_id, [4; 32]);
+    assert_eq!(agreement.terms_hash, [5; 32]);
+    assert_eq!(agreement.amount, AMOUNT);
+    assert_eq!(agreement.delivery_window_secs, 3_600);
+    assert_eq!(agreement.review_window_secs, MIN_REVIEW_WINDOW_SECS);
+    assert_eq!(agreement.funding_window_secs, 600);
+    assert_eq!(agreement.proposed_at, CREATED_AT);
+    assert_eq!(agreement.proposal_expires_at, CREATED_AT + 600);
+    assert_eq!(agreement.accepted_at, 0);
+    assert_eq!(agreement.milestone, Pubkey::default());
+    assert!(agreement.silence_acceptance);
+    assert_eq!(agreement.status, AgreementStatus::Proposed);
+}
+
+#[test]
+fn agreement_requires_valid_parties_commitments_windows_and_policy() {
+    let valid = |funder_key,
+                 worker_key,
+                 task_id,
+                 terms_hash,
+                 amount,
+                 delivery_window,
+                 review_window,
+                 funding_window,
+                 proposal_lifetime,
+                 silence_acceptance| {
+        Agreement::new(
+            funder_key,
+            worker_key,
+            task_id,
+            terms_hash,
+            amount,
+            delivery_window,
+            review_window,
+            funding_window,
+            proposal_lifetime,
+            silence_acceptance,
+            1,
+            CREATED_AT,
+        )
+    };
+
+    assert!(valid(
+        funder(),
+        funder(),
+        [4; 32],
+        [5; 32],
+        AMOUNT,
+        3_600,
+        MIN_REVIEW_WINDOW_SECS,
+        MIN_FUNDING_WINDOW_SECS,
+        600,
+        true,
+    )
+    .is_err());
+    assert!(valid(
+        funder(),
+        worker(),
+        [0; 32],
+        [5; 32],
+        AMOUNT,
+        3_600,
+        MIN_REVIEW_WINDOW_SECS,
+        MIN_FUNDING_WINDOW_SECS,
+        600,
+        true,
+    )
+    .is_err());
+    assert!(valid(
+        funder(),
+        worker(),
+        [4; 32],
+        [5; 32],
+        0,
+        3_600,
+        MIN_REVIEW_WINDOW_SECS,
+        MIN_FUNDING_WINDOW_SECS,
+        600,
+        true,
+    )
+    .is_err());
+    assert!(valid(
+        funder(),
+        worker(),
+        [4; 32],
+        [5; 32],
+        AMOUNT,
+        MIN_DELIVERY_WINDOW_SECS - 1,
+        MIN_REVIEW_WINDOW_SECS,
+        MIN_FUNDING_WINDOW_SECS,
+        600,
+        true,
+    )
+    .is_err());
+    assert!(valid(
+        funder(),
+        worker(),
+        [4; 32],
+        [5; 32],
+        AMOUNT,
+        3_600,
+        MIN_REVIEW_WINDOW_SECS,
+        MIN_FUNDING_WINDOW_SECS,
+        MIN_PROPOSAL_LIFETIME_SECS - 1,
+        true,
+    )
+    .is_err());
+    assert!(valid(
+        funder(),
+        worker(),
+        [4; 32],
+        [5; 32],
+        AMOUNT,
+        3_600,
+        MIN_REVIEW_WINDOW_SECS,
+        MIN_FUNDING_WINDOW_SECS,
+        MAX_PROPOSAL_LIFETIME_SECS + 1,
+        true,
+    )
+    .is_err());
+    assert!(valid(
+        funder(),
+        worker(),
+        [4; 32],
+        [5; 32],
+        AMOUNT,
+        3_600,
+        MIN_REVIEW_WINDOW_SECS,
+        MIN_FUNDING_WINDOW_SECS,
+        600,
+        false,
+    )
+    .is_err());
+    assert!(valid(
+        funder(),
+        worker(),
+        [4; 32],
+        [5; 32],
+        AMOUNT,
+        3_600,
+        MIN_REVIEW_WINDOW_SECS,
+        MIN_FUNDING_WINDOW_SECS - 1,
+        600,
+        true,
+    )
+    .is_err());
+    assert!(valid(
+        funder(),
+        worker(),
+        [4; 32],
+        [5; 32],
+        AMOUNT,
+        3_600,
+        MIN_REVIEW_WINDOW_SECS,
+        MAX_FUNDING_WINDOW_SECS + 1,
+        600,
+        true,
+    )
+    .is_err());
+}
+
+#[test]
+fn only_worker_can_accept_or_reject_before_expiry() {
+    let mut accepted = agreement();
+    assert!(accepted.accept(attacker(), CREATED_AT + 1).is_err());
+    accepted.accept(worker(), CREATED_AT + 1).unwrap();
+    assert_eq!(accepted.status, AgreementStatus::Accepted);
+    assert_eq!(accepted.accepted_at, CREATED_AT + 1);
+    assert!(accepted.reject(worker(), CREATED_AT + 2).is_err());
+
+    let mut rejected = agreement();
+    rejected.reject(worker(), CREATED_AT + 1).unwrap();
+    assert_eq!(rejected.status, AgreementStatus::Rejected);
+    assert!(rejected.accept(worker(), CREATED_AT + 2).is_err());
+
+    let mut expired = agreement();
+    assert!(expired
+        .accept(worker(), expired.proposal_expires_at + 1)
+        .is_err());
+    assert!(expired
+        .reject(worker(), expired.proposal_expires_at + 1)
+        .is_err());
+}
+
+#[test]
+fn funding_requires_worker_acceptance_and_starts_a_full_delivery_window() {
+    let mut accepted = agreement();
+    let milestone = Pubkey::new_unique();
+    assert!(accepted.fund(funder(), milestone, CREATED_AT + 1).is_err());
+    accepted.accept(worker(), CREATED_AT + 2).unwrap();
+    assert!(accepted
+        .fund(funder(), Pubkey::default(), CREATED_AT + 3)
+        .is_err());
+    assert!(accepted
+        .fund(attacker(), milestone, CREATED_AT + 3)
+        .is_err());
+
+    let funded_at = CREATED_AT + 4;
+    let due_at = accepted.fund(funder(), milestone, funded_at).unwrap();
+    assert_eq!(due_at, funded_at + i64::from(accepted.delivery_window_secs));
+    assert_eq!(accepted.status, AgreementStatus::Funded);
+    assert_eq!(accepted.milestone, milestone);
+    assert!(accepted.fund(funder(), milestone, funded_at + 1).is_err());
+
+    let mut expired = agreement();
+    expired.accept(worker(), CREATED_AT + 2).unwrap();
+    let funding_expires_at = expired.funding_expires_at().unwrap();
+    assert!(expired
+        .fund(funder(), milestone, funding_expires_at)
+        .is_ok());
+
+    let mut expired = agreement();
+    expired.accept(worker(), CREATED_AT + 2).unwrap();
+    let funding_expires_at = expired.funding_expires_at().unwrap();
+    assert!(expired
+        .fund(funder(), milestone, funding_expires_at + 1)
+        .is_err());
+}
+
 #[test]
 fn creation_freezes_parties_terms_amount_and_deadline() {
     let milestone = milestone();
@@ -55,6 +301,35 @@ fn creation_freezes_parties_terms_amount_and_deadline() {
     assert_eq!(milestone.revision_attempts(), 0);
     assert_eq!(milestone.claim_grace_secs(), MIN_REVIEW_WINDOW_SECS);
     assert_eq!(milestone.status, MilestoneStatus::Open);
+}
+
+#[test]
+fn v2_milestones_reuse_the_legacy_layout_and_decode_version_bits() {
+    let mut milestone = Milestone::new_v2(
+        funder(),
+        worker(),
+        [4; 32],
+        [5; 32],
+        AMOUNT,
+        DUE_AT,
+        MIN_REVIEW_WINDOW_SECS,
+        252,
+        CREATED_AT,
+    )
+    .unwrap();
+
+    assert_eq!(Milestone::INIT_SPACE, 223);
+    assert!(milestone.is_protocol_v1());
+    assert!(milestone.is_protocol_v2());
+    assert_eq!(milestone.protocol_version(), 2);
+    assert_eq!(milestone.revision_attempts(), 0);
+
+    milestone.submit(worker(), [6; 32], CREATED_AT + 1).unwrap();
+    milestone
+        .request_revision(funder(), [7; 32], CREATED_AT + 2)
+        .unwrap();
+    assert_eq!(milestone.protocol_version(), 2);
+    assert_eq!(milestone.revision_attempts(), 1);
 }
 
 #[test]
@@ -218,7 +493,7 @@ fn silent_acceptance_requires_review_and_claim_grace_to_elapse() {
 }
 
 #[test]
-fn permissionless_settlement_is_v1_only_and_waits_for_claim_grace() {
+fn permissionless_settlement_requires_an_acknowledged_protocol_and_claim_grace() {
     let submitted_at = CREATED_AT + 10;
     let claimable_at = submitted_at + i64::from(MIN_REVIEW_WINDOW_SECS) * 2;
     let mut current = milestone();

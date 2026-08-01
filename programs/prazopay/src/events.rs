@@ -1,6 +1,49 @@
 use anchor_lang::prelude::*;
 
 #[event]
+pub struct AgreementProposed {
+    pub agreement: Pubkey,
+    pub funder: Pubkey,
+    pub worker: Pubkey,
+    pub task_id: [u8; 32],
+    pub terms_hash: [u8; 32],
+    pub amount: u64,
+    pub delivery_window_secs: u32,
+    pub review_window_secs: u32,
+    pub funding_window_secs: u32,
+    pub proposed_at: i64,
+    pub proposal_expires_at: i64,
+    pub silence_acceptance: bool,
+}
+
+#[event]
+pub struct AgreementAccepted {
+    pub agreement: Pubkey,
+    pub worker: Pubkey,
+    pub terms_hash: [u8; 32],
+    pub accepted_at: i64,
+    pub funding_expires_at: i64,
+}
+
+#[event]
+pub struct AgreementRejected {
+    pub agreement: Pubkey,
+    pub worker: Pubkey,
+    pub rejected_at: i64,
+}
+
+#[event]
+pub struct AgreementFunded {
+    pub agreement: Pubkey,
+    pub milestone: Pubkey,
+    pub funder: Pubkey,
+    pub worker: Pubkey,
+    pub amount: u64,
+    pub funded_at: i64,
+    pub due_at: i64,
+}
+
+#[event]
 pub struct MilestoneCreated {
     pub milestone: Pubkey,
     pub funder: Pubkey,

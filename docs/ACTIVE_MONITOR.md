@@ -1,6 +1,38 @@
 # ZeroClaw active monitor
 
-Date: 2026-07-30
+Date: 2026-08-01
+
+## Protocol-v2 Agreement journey monitor
+
+The deployed v2 workflow adds `prazopay_agreement_status` and a dedicated wrapper:
+
+```bash
+bash ./scripts/zeroclaw-prazopay-agreement-monitor.sh \
+  install AGREEMENT_PDA DISCORD_CHANNEL_ID
+```
+
+It reads only finalized Agreement state and produces compact English cards for:
+
+- `PROPOSED`: Worker verifies the committed terms and may accept or reject;
+- `ACCEPTED`: only the Funder may fund before the independent funding expiry;
+- `REJECTED` or derived expiry: one final no-funds-locked card; and
+- `FUNDED`: the same heartbeat follows the Milestone PDA stored in the
+  Agreement and calls the Milestone tool automatically. If the Milestone has
+  no actionable alert yet, one deduplicated, non-terminal `Escrow Funded`
+  handoff card confirms that monitoring continued.
+
+The relay closes only after an Agreement is rejected/expires or the linked
+Milestone reaches one terminal outcome. The Agreement tool reports
+`milestone_created`, not `funds_locked`, because only the linked Milestone tool
+can determine whether escrow remains live after funding.
+
+Reminder stages come from on-chain `proposed_at`, `accepted_at`, and
+the active proposal or funding boundary: state entry, 30 minutes, 2 hours,
+daily, and the deadline boundary.
+
+Protocol v2 now has a finalized Agreement-to-paid-Milestone public lifecycle.
+The runtime records below remain the earlier v1 ZeroClaw monitor evidence until
+a separate v2 journey-monitor trace is captured.
 
 ## What ZeroClaw does
 
@@ -102,7 +134,7 @@ The event changed because the chain's action boundary changed, not because the
 model guessed that time had passed.
 
 This earlier run documents backward-compatible `v0_legacy` behavior. It is not
-the current v1 silence-settlement policy.
+the current v2 Agreement-first policy.
 
 Its machine-readable record is
 [`../fixtures/devnet-active-monitor.json`](../fixtures/devnet-active-monitor.json).
@@ -167,8 +199,10 @@ command succeeds. The state survives relay and daemon restarts.
 The model cannot prove that a previous Discord delivery was seen. A crash in
 the narrow interval after Discord accepts the message but before the relay
 commits its local state can still repeat an alert; exactly once is not claimed.
-A provider or RPC outage delays delivery instead of silently exhausting a
-terminal notification window. None of those failures can redirect or release
+A provider or RPC outage generates a sparse degraded alert at the first
+failure, 30 minutes, 2 hours, then daily, followed by one recovery card after a
+successful read. It cannot silently exhaust a terminal notification window.
+None of those failures can redirect or release
 escrow because ZeroClaw has no signing capability and the Solana program remains
 the sole settlement authority.
 

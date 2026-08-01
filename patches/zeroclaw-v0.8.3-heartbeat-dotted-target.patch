@@ -1,0 +1,59 @@
+diff --git a/crates/zeroclaw-runtime/src/daemon/mod.rs b/crates/zeroclaw-runtime/src/daemon/mod.rs
+index 9f07f14..96b62a1 100644
+--- a/crates/zeroclaw-runtime/src/daemon/mod.rs
++++ b/crates/zeroclaw-runtime/src/daemon/mod.rs
+@@ -1765,18 +1765,22 @@ fn auto_detect_heartbeat_channel(config: &Config) -> Option<(String, String)> {
+ }
+ 
+ fn validate_heartbeat_channel_config(config: &Config, channel: &str) -> Result<()> {
+-    if !config.channels.is_known_channel(channel) {
++    // Delivery accepts dotted `<type>.<alias>` references. Validate their
++    // transport type here while preserving the complete reference for the
++    // channel registry and fallback sender.
++    let channel_type = channel.split_once('.').map_or(channel, |(kind, _)| kind);
++    if !config.channels.is_known_channel(channel_type) {
+         anyhow::bail!("unsupported heartbeat.target channel: {channel}");
+     }
+-    if !config.channels.is_channel_configured(channel) {
++    if !config.channels.is_channel_configured(channel_type) {
+         anyhow::bail!(
+-            "heartbeat.target is set to {channel} but channels.{channel} is not configured"
++            "heartbeat.target is set to {channel} but channels.{channel_type} is not configured"
+         );
+     }
+-    if !config.channels.is_channel_deliverable(channel) {
++    if !config.channels.is_channel_deliverable(channel_type) {
+         anyhow::bail!(
+-            "heartbeat.target is set to {channel} but {channel} is an input-only channel that cannot deliver outbound messages"
++            "heartbeat.target is set to {channel} but {channel_type} is an input-only channel that cannot deliver outbound messages"
+         );
+     }
+     Ok(())
+ }
+@@ -2331,6 +2335,26 @@ mod tests {
+         );
+     }
+ 
++    #[test]
++    fn resolve_delivery_accepts_dotted_webhook_target() {
++        let mut config = Config::default();
++        config.heartbeat.target = Some("webhook.default".into());
++        config.heartbeat.to = Some("1532408222730686565".into());
++        config
++            .channels
++            .webhook
++            .insert("default".to_string(), Default::default());
++
++        let target = resolve_heartbeat_delivery(&config).unwrap();
++        assert_eq!(
++            target,
++            Some((
++                "webhook.default".to_string(),
++                "1532408222730686565".to_string()
++            ))
++        );
++    }
++
+     #[test]
+     fn resolve_delivery_accepts_matrix_target() {
+         let mut config = Config::default();

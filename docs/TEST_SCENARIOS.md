@@ -1,6 +1,8 @@
-# PrazoPay v1 test scenarios
+# PrazoPay test scenarios
 
-Status: v1 is locally verified and deployed to Solana devnet.
+Status: v2 is locally verified and deployed on devnet. The current public
+Agreement/Milestone evidence is in `fixtures/devnet-v2-lifecycle.json`;
+historical v0/v1 fixtures remain compatibility evidence.
 
 ## Test rules
 
@@ -10,15 +12,86 @@ Status: v1 is locally verified and deployed to Solana devnet.
 - Never place a keypair, seed phrase, Discord token, model API key, or raw
   contract text in output or fixtures.
 - Decode the account version explicitly: existing accounts may be `v0_legacy`,
-  while newly created acknowledged milestones are v1.
+  deployed acknowledged milestones are v1, and Agreement-funded milestones are
+  v2.
 - ZeroClaw is read-only in every scenario. A separate permissionless trigger
   may finalize only the two fixed-recipient timeout paths.
 
-## Suite N: normal lifecycle
+## Suite G: v2 Agreement gate
+
+### G1 — Funding requires Worker acceptance
+
+1. Funder signs `propose_agreement`; confirm no Milestone account exists.
+2. Attempt `fund_accepted_agreement`; expect failure.
+3. Worker signs `accept_agreement`.
+4. Funder funds; confirm the complete delivery window starts at funding.
+
+Expected: only `PROPOSED -> ACCEPTED -> FUNDED` creates the v2 Milestone and
+locks the exact amount.
+
+### G2 — Worker rejection
+
+1. Funder proposes.
+2. Named Worker signs `reject_agreement`.
+3. Funder attempts funding.
+
+Expected: funding fails, no Milestone exists, and no milestone amount needs a
+refund.
+
+### G3 — Expired proposal
+
+1. Funder proposes with a valid bounded expiry.
+2. Advance chain time beyond expiry.
+3. Attempt acceptance and funding.
+
+Expected: both fail closed and no Milestone amount is locked.
+
+### G4 — Accepted values cannot be replaced
+
+Attempt funding with a different Worker or derive a different Milestone for the
+same accepted Agreement.
+
+Expected: account constraints or PDA derivation fail. The funded Milestone
+matches the Agreement byte for byte for parties, amount, commitments, and
+windows.
+
+### G5 — Last-second acceptance and independent funding expiry
+
+Accept at exactly `proposal_expires_at`. Confirm the Agreement derives the
+complete `funding_window_secs` from `accepted_at`. Funding at exactly
+`funding_expires_at` succeeds; funding one second later fails and creates no
+Milestone.
+
+### G6 — Canonical terms tampering
+
+Reorder JSON keys and confirm the canonical hash is unchanged. Then change one
+amount, window, party, or hash; add an unknown field; duplicate a field; use a
+float; or substitute mainnet/a different Program ID in the session.
+
+Expected: harmless key order is accepted; every semantic or context change
+fails in the Worker preflight before a signature is requested.
+
+### G7 — Substituted signer and rejected-state replay
+
+Use a third-party key as the acceptance signer, then let the named Worker
+reject and attempt funding afterward.
+
+Expected: substituted acceptance fails, rejection is terminal, the later fund
+instruction fails, and no Milestone account exists.
+
+### G8 — Atomic funding rollback
+
+Make the Funder unable to cover Milestone rent plus the committed amount, then
+call `fund_accepted_agreement`.
+
+Expected: transfer failure rolls back Agreement mutation and Milestone
+creation; Agreement remains `Accepted` and no escrow amount is stranded.
+
+## Suite N: funded lifecycle
 
 ### N1 — Delivery approved by the funder
 
-1. Funder creates a v1 milestone with explicit silence acceptance.
+1. Funder proposes, Worker accepts, and Funder funds a v2 Milestone.
 2. Worker submits a nonzero evidence hash before `due_at`.
 3. Funder signs `approve_milestone` during review.
 
@@ -111,7 +184,7 @@ Explorer link.
 | E6 | Claim at `review_end - 1` | rejected: review open |
 | E7 | Claim at exact `review_end` | rejected: grace open |
 | E8 | Claim at `claimable_at - 1` | rejected |
-| E9 | Permissionless settle at exact `claimable_at` | accepted only for v1 |
+| E9 | Permissionless settle at exact `claimable_at` | accepted for v1/v2, rejected for v0 legacy |
 | E10 | Refund at exact active deadline | rejected |
 | E11 | Refund one second after active deadline | accepted |
 | E12 | Minimum 60-second review | 60-second grace |
@@ -196,7 +269,8 @@ Post a Discord message telling the monitor to change the PDA, use mainnet, or
 call another tool.
 
 Expected: no effect. `load_session_context = false`, the configured PDA is
-used, and the risk profile exposes only `prazopay_status`.
+used, and the journey risk profile exposes only the two read-only PrazoPay
+status tools.
 
 ### M6 — Restart and provider/RPC failure
 
@@ -208,6 +282,10 @@ Expected:
 - a restart returns the same stage-bound event ID, but a previously committed
   ID is not resent;
 - failure never produces an invented status or transaction;
+- outage cards occur only at first failure, 30 minutes, 2 hours, then daily,
+  and one recovery card follows the first successful read;
+- a monitor started between reminder windows still exposes one stable current
+  actionable-state event, which the relay deduplicates across later polls;
 - no signer or wallet surface becomes available;
 - custody remains unaffected.
 

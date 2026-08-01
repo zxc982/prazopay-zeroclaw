@@ -7,16 +7,19 @@
 
 [![CI](https://github.com/zxc982/prazopay-zeroclaw/actions/workflows/ci.yml/badge.svg)](https://github.com/zxc982/prazopay-zeroclaw/actions/workflows/ci.yml)
 
-PrazoPay turns a freelance milestone into an immutable Solana state machine:
-the funder locks the worker, amount, terms hash, initial delivery deadline, and
-review window before work begins. The signed creation instruction must
-explicitly acknowledge silence-based acceptance. Every on-time submission
-starts a complete review window. If no review action occurs, a deterministic
-claim grace period follows before any permissionless trigger may settle the
-exact amount only to the immutable worker. A revision opens a new delivery
-window of the same duration as the agreed review window. If no delivery is
-pending when the active deadline expires, the locked amount returns only to
-the original funder.
+PrazoPay turns a freelance milestone into an immutable Solana state machine.
+In the deployed **protocol v2**, the Funder first proposes the parties,
+amount, terms commitment, delivery window, review/revision window, independent
+post-acceptance funding window, and silence policy
+without locking funds. The named Worker must sign the same on-chain Agreement
+before the Funder can fund it. Funding then creates the Milestone and starts
+the complete delivery window.
+
+After delivery, only the Funder may approve or request revision during review.
+If the explicitly accepted review window and claim grace both expire, any
+permissionless trigger may release the exact amount only to the immutable
+Worker. If delivery is missed, anyone may return the exact amount only to the
+original Funder.
 
 > Lock the money. Lock the deadline. Remove the ghosting.
 
@@ -77,9 +80,11 @@ ZeroClaw is a coordinator, never a custodian:
   silence settlement, but can never choose the recipient;
 - the ZeroClaw WASM tool is read-only and returns state plus possible next
   actions;
-- a native ZeroClaw heartbeat workflow watches the public milestone, suppresses
-  quiet polls, and pushes role-specific Discord alerts when review, settlement,
-  or refund becomes actionable;
+- a separate read-only Agreement tool assigns Worker acceptance/rejection and
+  Funder funding actions before escrow exists;
+- a native ZeroClaw journey heartbeat follows the Agreement into its recorded
+  Milestone automatically and pushes role-specific Discord alerts when
+  acceptance, funding, review, settlement, or refund becomes actionable;
 - a loopback delivery relay persists successful event IDs, suppresses duplicate
   heartbeat output across restarts, and closes monitoring only after the single
   terminal Discord card is accepted;
@@ -108,86 +113,95 @@ bash ./scripts/reproduce.sh
 ```
 
 The final line is `REPRODUCE=PASS`. The command checks formatting, all Rust
-workspace tests, LiteSVM execution, a no-keypair source rebuild that must match
-the committed SBF byte for byte, the WASI Preview 2 status component, mandatory
-component validation, Bash syntax, relay tests, and fixture consistency.
+workspace tests, a fresh v2 SBF build, the complete Worker-acceptance lifecycle
+against that SBF in LiteSVM, the WASI Preview 2 status component, mandatory
+component validation, path-independent byte-exact WASM comparison, Bash syntax,
+relay tests, and historical v1 fixture consistency.
 
 See [`docs/REPRODUCE.md`](docs/REPRODUCE.md) for prerequisites, expected output,
 the verification map, and independent public-chain checks.
 
-To compare the repository evidence with live finalized Solana devnet state,
-without a wallet or signer:
+To compare the current v2 repository evidence with live finalized Solana
+devnet state, without a wallet or signer:
 
 ```powershell
-.\scripts\verify-devnet-live.ps1
+.\scripts\verify-devnet-v2-live.ps1
 ```
 
-This read-only check fetches the Program and ProgramData accounts, compares the
-on-chain executable prefix byte for byte with `fixtures/prazopay-v1.so`, decodes
-the recorded milestone, verifies all three lifecycle transactions, and checks
-that the Worker gained exactly one lamport.
+This read-only check fetches ProgramData, the v2 Agreement and Milestone,
+compares the executable byte for byte with `fixtures/prazopay-v2.so`, verifies
+the upgrade plus five lifecycle transactions and their actual signers, and
+checks that the Worker gained exactly one lamport.
 
 ## What the reproduction verifies
 
 The deterministic suite demonstrates:
 
-1. a funder creates and funds one milestone;
-2. the stored parties, amount, terms hash, initial deadline, review window, and
-   explicit silence-acceptance policy match the signed instruction;
-3. only the worker can submit an evidence hash before the due date;
-4. only the funder can approve or request a revision;
-5. a last-second submission still receives the complete review window;
-6. only v1 milestones can be permissionlessly settled after both review and
-   claim grace, and the immutable worker is the only possible recipient;
-7. a bounded revision receives a fresh delivery window;
-8. an open, unsubmitted milestone can refund only after the active deadline;
+1. a Funder can propose terms without locking SOL;
+2. funding is rejected until the exact named Worker signs acceptance;
+3. Worker rejection closes the proposal without creating a funded Milestone;
+4. accepted terms, immutable parties, amount, timing, and policy are copied
+   into a v2 Milestone only when the Funder funds;
+5. the delivery clock starts at funding, not at proposal;
+6. last-second Worker acceptance still opens the complete independent funding
+   window, while late funding fails closed;
+7. only the Worker can submit and only the Funder can approve or request
+   revision;
+8. silence settlement becomes permissionless only after the agreed review and
+   grace periods, while the immutable Worker remains the only recipient;
+9. an open, unsubmitted milestone can refund only after the active deadline;
    and
-9. every terminal path releases the locked amount exactly once.
+10. every funded terminal path releases the locked amount exactly once.
 
-## Verified devnet evidence
+## Verified devnet evidence (deployed v2)
 
-The exact committed SBF is deployed at
+The exact committed v2 SBF is deployed at
 [`DjdT1wW8zEoK395yujT5ujBsDboBUFyx5LCfLBSwxAjm`](https://explorer.solana.com/address/DjdT1wW8zEoK395yujT5ujBsDboBUFyx5LCfLBSwxAjm?cluster=devnet).
-Independent one-lamport milestones exercised revision plus approval,
-silent-review settlement, and permissionless expiry refund. A real ZeroClaw v0.8.3
-turn then loaded `prazopay_status` and read the finalized `PAID` account from
-devnet.
+The upgrade finalized at slot `480289270`; the deployed program prefix is
+byte-for-byte identical to SHA-256
+`a54c676c98f526425ba77b54cfdb64a6ddddab2cf218d12f732dfa95bb4d8294`,
+with a disclosed 45-byte all-zero capacity suffix.
 
-The active-monitor extension adds a machine-readable alert decision, an
-agent-owned heartbeat workflow, and a durable host-side delivery acknowledgement
-layer. This makes ZeroClaw the operational layer: it observes finalized chain
-state on schedule, classifies the next permitted human action, and delivers the
-alert without ever becoming the signer or settlement authority.
+A fresh one-lamport lifecycle exercised the complete v2 path: Funder proposal
+without custody, independent Worker acceptance, atomic funding, Worker
+delivery, and Funder approval. The immutable Worker gained exactly one
+lamport. The live verifier checks finalized account bytes, transaction order,
+and actual signer sets without any wallet.
 
-See the [live active-monitor record](docs/ACTIVE_MONITOR.md),
-[`docs/DEVNET_EVIDENCE.md`](docs/DEVNET_EVIDENCE.md), and the public
-[`fixtures/`](fixtures/)
-evidence.
+See the [live v2 evidence](docs/DEVNET_EVIDENCE.md),
+[machine-readable fixture](fixtures/devnet-v2-lifecycle.json),
+[read-only verifier](scripts/verify_devnet_v2_live.py), and the historical
+[active-monitor record](docs/ACTIVE_MONITOR.md).
 
-Protocol v1 is deployed at slot `479993358`; the deployed prefix matches the
-local SBF SHA-256
-`b792b9099410354b8f940bb7fa9aef4bbfdb8f26b51161c5a5942884199d5bf2`.
-Legacy accounts retain their original worker-signed claim timing.
+- [v2 upgrade](https://explorer.solana.com/tx/2tyAdkSNL7WfjzE31yoGSPCLuL2uCJWWip96LDATbHQCLqW7UWtFTG7RXWDnDiQhmQspWcCtP3rgZ1RuEfX9ZGpA?cluster=devnet)
+- [Agreement](https://explorer.solana.com/address/Cg3xWCC4SiCEshSLcMSt6GGWSpb25zAhv9iTXuuBXeaW?cluster=devnet)
+- [Funder proposal](https://explorer.solana.com/tx/3PMLWgdYQFNTpX5EaqMXuSZeYu5wJj1tX98oNDyT4tVHqoXp74f1XpZHrfi4bKq6noFsjjct4HNtzRnx2jXGCEyW?cluster=devnet)
+- [Worker acceptance](https://explorer.solana.com/tx/4Jg6ZzySRszaiyHhiZoTNwAu7HQB22UDPEkvCh5fWc5NQ5rYTaj5knyoa7eaXyT7EHxFcYn4VHAQxWiUez5G5BuE?cluster=devnet)
+- [atomic funding](https://explorer.solana.com/tx/WYzqETBVnfP2aEtWuYkuuRcQqNRNUZcRywoV4P3Lo28QHgzWFFeLJjtJBWAp7tFKQhpVMnBxPxVLnhpdwefZx2N?cluster=devnet)
+- [Milestone](https://explorer.solana.com/address/Can5CgbqzVcH2rSJmPY8p73QYecAUcxdaFXFnYN2Qvvk?cluster=devnet)
+- [Worker delivery](https://explorer.solana.com/tx/5aKP68UxPxA24ib5sAd3jJDLHkpFHCufT2K2zu5t1SidExnMRN3XhHenQwbbthJmeY1EZ6kKNyqMZrMacg5NwE47?cluster=devnet)
+- [Funder approval](https://explorer.solana.com/tx/3gJaTe5sdqpXCruCnjWHrTqLyh5YtsygH9NWbsQmYkDrfZi9YDoHpcdHphvniuo6ZAmYrfGpDeHPUcc4rWaz78vd?cluster=devnet)
 
-The public evidence is independently inspectable without a PrazoPay wallet or
-ZeroClaw configuration:
-
-- [current v1 milestone](https://explorer.solana.com/address/ikUaYZUARH3KXK9y98MgfgSVsZJu3tcgHfgeKnCTTqB?cluster=devnet)
-- [creation transaction](https://explorer.solana.com/tx/2Eaf8P85jm5YhfsRg9akqKGgMqHf44BZ9PWxXbigSLKkUQgc1hRJAonr5Hx9UZZgmDpM3eSfyc5qzXPk2YjrA8cY?cluster=devnet)
-- [delivery transaction](https://explorer.solana.com/tx/3KoickzBmXxBbWpEpPn96CvnbpvW2po2Yz9ZdWA8162ZDCJWWvEuJa9EComt9mcsUrDZuc64Q7kJEata3rqUQh4p?cluster=devnet)
-- [permissionless settlement](https://explorer.solana.com/tx/2AZLiK1TaQ3GRFWpvkkbvHaQhXQJyr4Kz4TywZHJgKYCnkY3hJtyhDSqTvVZbjAYt3MqUUaLvFQbvKS12TJAQrBJ?cluster=devnet)
+Historical v0/v1 accounts remain readable and retain their original timing
+rules after the compatible upgrade.
 
 ## Repository layout
 
 ```text
 programs/prazopay/          Anchor program and LiteSVM tests
 plugins/prazopay-status/    Read-only ZeroClaw WASM status tool
+plugins/prazopay-agreement-status/
+                            Read-only v2 Agreement status tool
 clients/prazopay-devnet/    Three-path devnet lifecycle runner
 scripts/reproduce.*         Deterministic source-to-artifact reproduction
 scripts/verify-devnet-live.* Read-only live-chain verification
+scripts/verify-devnet-v2-live.* Current v2 live-chain verification
 scripts/zeroclaw-prazopay-monitor.sh
+scripts/zeroclaw-prazopay-agreement-monitor.sh
 fixtures/prazopay-v1.so     Exact SBF used by clean-room LiteSVM tests
-docs/PROTOCOL.md            State machine and invariants
+fixtures/prazopay-v2.so     Exact currently deployed v2 SBF
+docs/PROTOCOL.md            v2 Agreement and Milestone state machines
+docs/COMMUNICATION.md       Signed communication commitments and Discord role
 docs/THREAT_MODEL.md        Assets, trust boundary, threats, controls
 docs/COMPETITIVE_POSITIONING.md
 docs/TEST_SCENARIOS.md      Normal, boundary, adversarial, and monitor suites

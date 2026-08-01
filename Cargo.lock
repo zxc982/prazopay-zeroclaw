@@ -2599,6 +2599,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "prazopay-agreement-status"
+version = "0.1.0"
+dependencies = [
+ "base64 0.22.1",
+ "bs58",
+ "serde",
+ "serde_json",
+ "sha2 0.10.9",
+ "thiserror 2.0.19",
+ "waki",
+ "wit-bindgen 0.46.0",
+]
+
+[[package]]
 name = "prazopay-devnet"
 version = "0.1.0"
 dependencies = [

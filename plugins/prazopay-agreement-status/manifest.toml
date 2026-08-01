@@ -1,0 +1,7 @@
+name = "prazopay-agreement-status"
+version = "0.1.0"
+description = "Read one PrazoPay v2 Agreement from devnet and return deterministic acceptance and funding alert decisions."
+author = "PrazoPay"
+wasm_path = "prazopay-agreement-status.wasm"
+capabilities = ["tool"]
+permissions = ["http_client"]

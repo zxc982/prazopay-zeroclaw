@@ -32,6 +32,20 @@ pub enum ErrorCode {
     DeadlineStillOpen,
     #[msg("The maximum number of revisions has been reached")]
     MaxRevisionsReached,
+    #[msg("The delivery window is outside the supported range")]
+    InvalidDeliveryWindow,
+    #[msg("The agreement proposal lifetime is outside the supported range")]
+    InvalidProposalLifetime,
+    #[msg("The agreement proposal has expired")]
+    AgreementExpired,
+    #[msg("The funding window is outside the supported range")]
+    InvalidFundingWindow,
+    #[msg("The accepted agreement funding window has expired")]
+    FundingWindowExpired,
+    #[msg("The funded milestone address is invalid")]
+    InvalidMilestoneAddress,
+    #[msg("The agreement is not in the required state")]
+    InvalidAgreementStatus,
     #[msg("Checked time arithmetic overflowed")]
     TimeOverflow,
 }

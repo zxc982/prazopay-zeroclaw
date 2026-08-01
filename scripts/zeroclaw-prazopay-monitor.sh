@@ -11,6 +11,24 @@ notification_window_secs="${7:-$((interval_minutes * 60 + 120))}"
 relay_port="${8:-42620}"
 webhook_port="${9:-42619}"
 state_root="${10:-$config_dir/prazopay-monitor-state}"
+monitor_kind="${PRAZOPAY_MONITOR_KIND:-milestone}"
+
+case "$monitor_kind" in
+  milestone)
+    monitor_tools='["prazopay_status"]'
+    required_monitor_tools=("prazopay_status")
+    address_label="MILESTONE"
+    ;;
+  agreement)
+    monitor_tools='["prazopay_agreement_status","prazopay_status"]'
+    required_monitor_tools=("prazopay_agreement_status" "prazopay_status")
+    address_label="AGREEMENT"
+    ;;
+  *)
+    echo "PRAZOPAY_MONITOR_KIND must be milestone or agreement." >&2
+    exit 2
+    ;;
+esac
 
 zeroclaw_bin="${ZEROCLAW_BIN:-$HOME/.local/bin/zeroclaw}"
 agent_alias="creator"
@@ -25,8 +43,8 @@ Usage:
   zeroclaw-prazopay-monitor.sh disable MILESTONE CHANNEL_ID [INTERVAL_MINUTES] [ALERT_BEFORE_SECS] [CONFIG_DIR] [NOTIFICATION_WINDOW_SECS] [RELAY_PORT] [WEBHOOK_PORT] [STATE_ROOT]
   zeroclaw-prazopay-monitor.sh status  MILESTONE CHANNEL_ID [INTERVAL_MINUTES] [ALERT_BEFORE_SECS] [CONFIG_DIR] [NOTIFICATION_WINDOW_SECS] [RELAY_PORT] [WEBHOOK_PORT] [STATE_ROOT]
 
-The monitor keeps ZeroClaw's native heartbeat and read-only prazopay_status
-tool. Outbound cards pass through a loopback-only durable relay before Discord:
+The monitor keeps ZeroClaw's native heartbeat and exactly one read-only
+PrazoPay status tool. Outbound cards pass through a loopback-only durable relay before Discord:
 event IDs are committed only after successful delivery, duplicate stages are
 suppressed, and terminal outcomes remain retryable until acknowledged.
 EOF
@@ -65,7 +83,7 @@ require_zeroclaw
 case "$action" in
   install)
     if [[ ! "$milestone" =~ ^[1-9A-HJ-NP-Za-km-z]{32,44}$ ]]; then
-      echo "MILESTONE must be a 32-44 character base58 address." >&2
+      echo "$address_label must be a 32-44 character base58 address." >&2
       exit 2
     fi
     if [[ ! "$channel_id" =~ ^[0-9]{17,20}$ ]]; then
@@ -120,13 +138,30 @@ case "$action" in
       "$zeroclaw_bin" config get "risk_profiles.locked_down.auto_approve" \
         --config-dir "$config_dir"
     )"
-    if ! grep -Fq '"prazopay_status"' <<<"$auto_approve"; then
-      echo "prazopay_status is not approved for unattended read-only calls." >&2
-      echo "Run: ./scripts/zeroclaw-prazopay-approval.sh enable \"$config_dir\"" >&2
-      exit 1
-    fi
+    for required_tool in "${required_monitor_tools[@]}"; do
+      if ! grep -Fq "\"$required_tool\"" <<<"$auto_approve"; then
+        echo "$required_tool is not approved for unattended read-only calls." >&2
+        echo "Run: ./scripts/zeroclaw-prazopay-approval.sh enable \"$config_dir\"" >&2
+        exit 1
+      fi
+    done
 
-    prompt="Act as the PrazoPay Active Monitor. Copy this milestone exactly, then call prazopay_status exactly once with cluster devnet, milestone $milestone, alert_before_secs $alert_before_secs, and poll_interval_secs $notification_window_secs. The tool JSON is the sole source of truth. If the tool call fails, reply exactly NO_REPLY[FAIL]: PRAZOPAY_STATUS_UNAVAILABLE. If monitor.should_notify is false, reply exactly NO_REPLY. If monitor.should_notify is true, produce one compact English Discord card. Do not use a Markdown table; use a compact bullet list followed by a Next action section. Use heading 'PrazoPay Final Outcome' for SETTLEMENT_SUCCESS or MILESTONE_FAILED, 'PrazoPay Delay Alert' when monitor.event_code contains DELAYED, and 'PrazoPay Active Alert' otherwise. Always include protocol version, acceptance policy, shortened milestone, status, monitor.event_code, severity, responsible role, monitor.reminder_stage, seconds_to_boundary, currently allowed action names, the full monitor.event_id on a line beginning exactly 'Event ID:', and the Solana Explorer account URL. A final outcome card must also include outcome, amount_lamports, shortened funder, shortened worker, terminal_at, and the sentence 'This is the final notification; monitoring for this milestone is closed.' A delay card must identify the overdue obligation exactly: worker delivery or funder review. Funder review reminders continue on their own sparse schedule while the milestone remains unresolved. For PERMISSIONLESS_SETTLEMENT_READY or FUNDER_REVIEW_DELAYED_SETTLEMENT_READY, state that the silence policy is complete, any trigger may finalize the transaction, funds can go only to the immutable worker, and the worker is not overdue. If funder review and settlement readiness hit in one poll, produce one combined card, not two messages. State that each overdue schedule sends Discord reminders only at first delay, 30 minutes, 2 hours, then daily. State that ZeroClaw checks every $interval_minutes minute(s), uses a $notification_window_secs-second observation window to tolerate scheduler and model latency, and alerts only at state-entry, deadline, sparse escalation, permissionless settlement readiness, or the single final outcome. Never describe the polling interval as a fixed reminder interval. Never expose complete funder or worker addresses. Never request wallet material, sign, simulate, submit a transaction, or call any other tool. Respond only in English."
+    if [[ "$monitor_kind" == "agreement" ]]; then
+      prompt="$(cat <<EOF
+Act as the PrazoPay v2 Journey Monitor. Call prazopay_agreement_status exactly once with cluster devnet, agreement $milestone, alert_before_secs $alert_before_secs, and poll_interval_secs $notification_window_secs. Its JSON is the sole source of Agreement truth. If that call fails, reply exactly NO_REPLY[FAIL]: PRAZOPAY_AGREEMENT_STATUS_UNAVAILABLE.
+
+If Agreement status is funded, require a non-null milestone from that JSON, then call prazopay_status exactly once with cluster devnet, that exact milestone, alert_before_secs $alert_before_secs, and poll_interval_secs $notification_window_secs. From then on, the Milestone JSON is the source of live escrow truth. If the Milestone call fails or the address is absent, reply exactly NO_REPLY[FAIL]: PRAZOPAY_STATUS_UNAVAILABLE. This conditional second read is the automatic Agreement-to-Milestone handoff; never ask an operator to reinstall monitoring. If the Milestone monitor.should_notify is false, produce one non-terminal compact English card headed 'PrazoPay Escrow Funded' using the Agreement monitor.event_id. Include the shortened Agreement, shortened recorded Milestone, amount_lamports, complete terms_hash_hex, 'Milestone created: yes', the full Event ID, both Explorer URLs, and state that the journey monitor continues automatically. Never state that funds remain locked based only on the Agreement. The relay deduplicates this stable handoff card on later heartbeats. If the Milestone monitor.should_notify is true, skip the handoff card and use the Milestone card rules below.
+
+For a non-funded Agreement, reply exactly NO_REPLY when monitor.should_notify is false. Otherwise produce one compact English Discord card with bullets and a Next action section, never a table. Use heading 'PrazoPay Agreement Proposal' while awaiting Worker acceptance, 'PrazoPay Agreement Accepted' while awaiting Funder funding, and 'PrazoPay Agreement Closed' for rejection, proposal expiry, or funding-window expiry. Include protocol version, shortened Agreement, status, phase, amount_lamports, delivery_window_secs, revision_delivery_window_secs, review_window_secs, funding_window_secs, proposal_expires_at, funding_expires_at, silence_acceptance, shortened funder and worker, the complete 64-character terms_hash_hex, monitor.event_code, severity, responsible role, monitor.reminder_stage, seconds_to_boundary, currently allowed action names, the full monitor.event_id on a line beginning exactly 'Event ID:', and the Solana Explorer Agreement URL. The Agreement Explorer URL is exactly https://explorer.solana.com/address/$milestone?cluster=devnet; copy it without changing, shortening, or retyping any character. While proposed, state that no funds are locked and the Worker must compare the complete hash with the canonical terms document before signing. While accepted, state that no funds are locked, only the Funder may fund before funding_expires_at, and successful funding starts a fresh full delivery window. A rejected or expired Agreement is final and locked no milestone amount.
+
+For a funded Agreement, apply these Milestone card rules to the second tool result: reply exactly NO_REPLY when monitor.should_notify is false; otherwise use heading 'PrazoPay Final Outcome' for SETTLEMENT_SUCCESS or MILESTONE_FAILED, 'PrazoPay Delay Alert' when the event code contains DELAYED, and 'PrazoPay Active Alert' otherwise. Include protocol version, acceptance policy, shortened milestone, status, event code, severity, responsible role, reminder stage, seconds to boundary, allowed actions, complete event ID, and Explorer URL. Final cards also include outcome, amount_lamports, shortened parties, terminal_at, and 'This is the final notification; monitoring for this milestone is closed.' Identify worker-delivery and funder-review delays exactly. For permissionless settlement readiness, state that the committed silence policy is complete, anyone may trigger finalization, and funds can go only to the immutable Worker.
+
+ZeroClaw checks every $interval_minutes minute(s), uses a $notification_window_secs-second observation window, and outbound degradation reminders are sparse: first failure, 30 minutes, 2 hours, then daily. Never expose complete party addresses, request wallet material, sign, simulate, submit a transaction, or call any tool other than the phase-appropriate read-only tool(s) above. Respond only in English.
+EOF
+)"
+    else
+      prompt="Act as the PrazoPay Active Monitor. Copy this milestone exactly, then call prazopay_status exactly once with cluster devnet, milestone $milestone, alert_before_secs $alert_before_secs, and poll_interval_secs $notification_window_secs. The tool JSON is the sole source of truth. If the tool call fails, reply exactly NO_REPLY[FAIL]: PRAZOPAY_STATUS_UNAVAILABLE. If monitor.should_notify is false, reply exactly NO_REPLY. If monitor.should_notify is true, produce one compact English Discord card. Do not use a Markdown table; use a compact bullet list followed by a Next action section. Use heading 'PrazoPay Final Outcome' for SETTLEMENT_SUCCESS or MILESTONE_FAILED, 'PrazoPay Delay Alert' when monitor.event_code contains DELAYED, and 'PrazoPay Active Alert' otherwise. Always include protocol version, acceptance policy, shortened milestone, status, monitor.event_code, severity, responsible role, monitor.reminder_stage, seconds_to_boundary, currently allowed action names, the full monitor.event_id on a line beginning exactly 'Event ID:', and the Solana Explorer account URL. A final outcome card must also include outcome, amount_lamports, shortened funder, shortened worker, terminal_at, and the sentence 'This is the final notification; monitoring for this milestone is closed.' A delay card must identify the overdue obligation exactly: worker delivery or funder review. Funder review reminders continue on their own sparse schedule while the milestone remains unresolved. For PERMISSIONLESS_SETTLEMENT_READY or FUNDER_REVIEW_DELAYED_SETTLEMENT_READY, state that the silence policy is complete, any trigger may finalize the transaction, funds can go only to the immutable worker, and the worker is not overdue. If funder review and settlement readiness hit in one poll, produce one combined card, not two messages. State that each overdue schedule sends Discord reminders only at first delay, 30 minutes, 2 hours, then daily. State that ZeroClaw checks every $interval_minutes minute(s), uses a $notification_window_secs-second observation window to tolerate scheduler and model latency, and alerts only at state-entry, deadline, sparse escalation, permissionless settlement readiness, or the single final outcome. Never describe the polling interval as a fixed reminder interval. Never expose complete funder or worker addresses. Never request wallet material, sign, simulate, submit a transaction, or call any other tool. Respond only in English."
+    fi
 
     state_dir="$state_root/$milestone"
     token_file="$state_dir/relay-token"
@@ -150,16 +185,15 @@ case "$action" in
     set_config heartbeat.interval_minutes "$interval_minutes"
     set_config heartbeat.two_phase false
     set_config heartbeat.message "$prompt"
-    # ZeroClaw 0.8.3 validates heartbeat targets by bare channel type. With
-    # exactly one enabled webhook alias, its live registry exposes both
-    # `webhook.default` and the required compatibility key `webhook`.
-    set_config heartbeat.target webhook
+    # ZeroClaw 0.8.3 requires a dotted <type>.<alias> delivery reference.
+    # The alias still forwards through the authenticated loopback relay.
+    set_config heartbeat.target webhook.default
     set_config heartbeat.to "$channel_id"
     set_config heartbeat.adaptive false
     set_config heartbeat.load_session_context false
     set_config heartbeat.task_timeout_secs 120
 
-    # This alias must be enabled so ZeroClaw registers the bare `webhook` key.
+    # This alias must be enabled so ZeroClaw registers `webhook.default`.
     # The otherwise-unused inbound listener is protected by a random HMAC
     # secret; outbound delivery is additionally authenticated to the relay.
     set_config channels.webhook.default.enabled true
@@ -175,8 +209,12 @@ case "$action" in
 
     # The heartbeat API has no per-task allowlist in ZeroClaw 0.8.3. Narrow
     # this dedicated Creator agent's risk profile to the one required tool.
-    set_config risk_profiles.locked_down.allowed_tools '["prazopay_status"]'
-    set_config risk_profiles.locked_down.auto_approve '["prazopay_status"]'
+    # The runtime profile must remain agentic so the heartbeat can execute the
+    # allowlisted read-only WASM tools; `agentic = false` leaves the model with
+    # no registered tools and turns a requested call into plain response text.
+    set_config runtime_profiles.tight.agentic true
+    set_config risk_profiles.locked_down.allowed_tools "$monitor_tools"
+    set_config risk_profiles.locked_down.auto_approve "$monitor_tools"
 
     "$relay_script" start \
       "$milestone" "$channel_id" "$config_dir" "$state_root" "$relay_port"

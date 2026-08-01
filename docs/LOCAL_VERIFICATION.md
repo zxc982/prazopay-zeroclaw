@@ -27,8 +27,12 @@ Full setup instructions and expected output are in
 
 The suite checks that:
 
-- milestone parties, amount, terms hash, deadline, review window, and
-  silence-acceptance acknowledgement are stored from the signed instruction;
+- a Funder proposal locks no milestone amount;
+- only the immutable Worker can accept or reject the exact Agreement;
+- funding before acceptance and funding after expiry both fail;
+- successful funding copies the accepted parties, amount, terms hash, timing,
+  and silence policy into a v2 Milestone;
+- the delivery window starts only when funding succeeds;
 - only the immutable Worker can submit before the active deadline;
 - only the immutable Funder can approve or request a revision;
 - a last-second submission still receives the complete review window;
@@ -39,6 +43,8 @@ The suite checks that:
 - every terminal path releases the escrow exactly once;
 - the read-only WASM tool validates the cluster, PDA, owner, discriminator,
   account length, protocol version, and finalized commitment;
+- the Agreement WASM tool derives role-specific acceptance/funding actions and
+  sparse alerts from chain timestamps while keeping pre-funding funds false;
 - monitor decisions are based on structured tool output rather than prompt
   memory; and
 - the relay acknowledges delivered event IDs, suppresses duplicates across
@@ -49,26 +55,29 @@ The suite checks that:
 The clean-checkout suite:
 
 1. runs all Rust workspace tests, including transaction-level LiteSVM cases;
-2. rebuilds the public program source without a deployment keypair and requires
-   byte-for-byte equality with the committed devnet SBF;
-3. loads that exact committed SBF in the execution tests;
-4. compiles `prazopay-status` for `wasm32-wasip2`;
-5. requires `wasm-tools` validation of that component;
+2. builds a fresh v2 SBF without a deployment keypair and compares it byte for
+   byte with the exact deployed-v2 fixture;
+3. loads that SBF and executes Worker acceptance, funding, delivery, and
+   settlement, while compatibility tests retain the historical deployed-v1
+   fixture;
+4. compiles both `prazopay-status` and `prazopay-agreement-status` for
+   `wasm32-wasip2`;
+5. requires `wasm-tools` validation of both components;
 6. runs the relay and live-verifier Python tests plus Bash syntax checks; and
 7. verifies consistency across the public evidence fixtures.
 
-The committed SBF is
-[`fixtures/prazopay-v1.so`](../fixtures/prazopay-v1.so):
+The current committed SBF is
+[`fixtures/prazopay-v2.so`](../fixtures/prazopay-v2.so):
 
 | Property | Value |
 | --- | --- |
 | Program ID | `DjdT1wW8zEoK395yujT5ujBsDboBUFyx5LCfLBSwxAjm` |
-| Length | `216936` bytes |
-| SHA-256 | `b792b9099410354b8f940bb7fa9aef4bbfdb8f26b51161c5a5942884199d5bf2` |
+| Length | `286368` bytes |
+| SHA-256 | `a54c676c98f526425ba77b54cfdb64a6ddddab2cf218d12f732dfa95bb4d8294` |
 
-That hash matches the rebuilt source output and the deployed program prefix
-recorded in
-[`fixtures/devnet-fair-lifecycle.json`](../fixtures/devnet-fair-lifecycle.json).
+That hash identifies the current deployed-v2 program prefix recorded in
+[`fixtures/devnet-v2-lifecycle.json`](../fixtures/devnet-v2-lifecycle.json).
+The historical v1 SBF remains available for compatibility tests.
 
 ## Optional deployment-workspace check
 
@@ -90,5 +99,5 @@ For public deployment, lifecycle, and real ZeroClaw evidence, see
 For live, finalized, read-only comparison against Solana devnet, run:
 
 ```powershell
-.\scripts\verify-devnet-live.ps1
+.\scripts\verify-devnet-v2-live.ps1
 ```

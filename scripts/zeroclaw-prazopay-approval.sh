@@ -8,7 +8,7 @@ path="risk_profiles.locked_down.auto_approve"
 
 case "$mode" in
   enable)
-    value='["prazopay_status"]'
+    value='["prazopay_status","prazopay_agreement_status"]'
     ;;
   disable)
     value='[]'

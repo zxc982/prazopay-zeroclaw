@@ -1,6 +1,6 @@
 # Devnet deployment and runtime evidence
 
-Date: 2026-07-30
+Date: 2026-08-01
 
 ## Goal
 
@@ -11,7 +11,57 @@ through the real ZeroClaw v0.8.3 WASM host.
 No mainnet wallet, real-value asset, private key, seed phrase, Discord token,
 or model API key entered the program, plugin, fixture, or agent prompt.
 
-## Deployment
+## Current v2 deployment
+
+| Field | Value |
+| --- | --- |
+| Cluster | `devnet` |
+| Program ID | `DjdT1wW8zEoK395yujT5ujBsDboBUFyx5LCfLBSwxAjm` |
+| ProgramData | `4qVQJLEipmRqcKYbEUnptxJ8aYbtBojryEDEHSzwf6BM` |
+| Upgrade authority | `9yZoUQRdQ13cZkf6nPb4apAV7S2pPkuwYUyDmTpM8c8g` |
+| Upgrade slot | `480289270` |
+| ProgramData length | `286413` bytes |
+| Local v2 SBF length | `286368` bytes |
+| Deployed v2 SBF SHA-256 | `a54c676c98f526425ba77b54cfdb64a6ddddab2cf218d12f732dfa95bb4d8294` |
+| Status | `finalized` |
+
+- [Program](https://explorer.solana.com/address/DjdT1wW8zEoK395yujT5ujBsDboBUFyx5LCfLBSwxAjm?cluster=devnet)
+- [v2 upgrade transaction](https://explorer.solana.com/tx/2tyAdkSNL7WfjzE31yoGSPCLuL2uCJWWip96LDATbHQCLqW7UWtFTG7RXWDnDiQhmQspWcCtP3rgZ1RuEfX9ZGpA?cluster=devnet)
+
+The candidate was uploaded to a recoverable Buffer, dumped back from finalized
+devnet state, and compared byte for byte before upgrade. The live verifier then
+read ProgramData independently: the first `286368` bytes match the committed
+v2 SBF and the remaining `45` capacity bytes are all zero.
+
+## Current v2 Worker-accepted lifecycle
+
+The lifecycle locked exactly **1 lamport** only after Worker acceptance:
+
+| Stage | Signer | Public evidence |
+| --- | --- | --- |
+| propose exact terms without custody | Funder | [proposal transaction](https://explorer.solana.com/tx/3PMLWgdYQFNTpX5EaqMXuSZeYu5wJj1tX98oNDyT4tVHqoXp74f1XpZHrfi4bKq6noFsjjct4HNtzRnx2jXGCEyW?cluster=devnet) |
+| accept the same Agreement | Worker | [acceptance transaction](https://explorer.solana.com/tx/4Jg6ZzySRszaiyHhiZoTNwAu7HQB22UDPEkvCh5fWc5NQ5rYTaj5knyoa7eaXyT7EHxFcYn4VHAQxWiUez5G5BuE?cluster=devnet) |
+| create and fund v2 Milestone atomically | Funder | [funding transaction](https://explorer.solana.com/tx/WYzqETBVnfP2aEtWuYkuuRcQqNRNUZcRywoV4P3Lo28QHgzWFFeLJjtJBWAp7tFKQhpVMnBxPxVLnhpdwefZx2N?cluster=devnet) |
+| commit delivery evidence | Worker | [delivery transaction](https://explorer.solana.com/tx/5aKP68UxPxA24ib5sAd3jJDLHkpFHCufT2K2zu5t1SidExnMRN3XhHenQwbbthJmeY1EZ6kKNyqMZrMacg5NwE47?cluster=devnet) |
+| approve and release exact amount | Funder | [approval transaction](https://explorer.solana.com/tx/3gJaTe5sdqpXCruCnjWHrTqLyh5YtsygH9NWbsQmYkDrfZi9YDoHpcdHphvniuo6ZAmYrfGpDeHPUcc4rWaz78vd?cluster=devnet) |
+
+- [Agreement account](https://explorer.solana.com/address/Cg3xWCC4SiCEshSLcMSt6GGWSpb25zAhv9iTXuuBXeaW?cluster=devnet): `FUNDED`, exact Worker and terms commitment, linked Milestone PDA.
+- [Milestone account](https://explorer.solana.com/address/Can5CgbqzVcH2rSJmPY8p73QYecAUcxdaFXFnYN2Qvvk?cluster=devnet): `PAID`, protocol marker `v2`, amount `1 lamport`.
+- Terms SHA-256: `ad50e6c51dad66d7b4f7375408d70e4a3ab4151644c7b2753b3a840d3637fe24`.
+- Worker balance observation: `4940007 -> 4940008` lamports.
+
+The public-only verifier confirms all six transactions are finalized and in
+order, the proposal is not Worker-signed, acceptance and delivery are
+Worker-signed, funding and approval are Funder-signed, and the approval
+transaction credits the immutable Worker by exactly one lamport:
+
+```bash
+bash ./scripts/verify-devnet-v2-live.sh
+```
+
+Expected final line: `LIVE_DEVNET_V2_VERIFY=PASS`.
+
+## Historical v1 deployment
 
 | Field | Value |
 | --- | --- |
@@ -32,12 +82,11 @@ The v1 SBF was written to a temporary buffer, dumped back, and compared before
 deployment. After the upgrade, the first `216936` ProgramData bytes matched the
 local SBF byte for byte. The remaining `8848` capacity bytes were all zero.
 
-The current public program therefore contains the v1 fair-settlement
-instruction: after Funder review and claim grace, any signer may trigger
-settlement, but the locked amount can be transferred only to the immutable
-Worker.
+The historical v1 bytes and transactions remain committed for compatibility
+testing. The current ProgramData is v2; legacy account timing remains supported
+by the upgraded program.
 
-## Current v1 fair lifecycle
+## Historical v1 fair lifecycle
 
 The fresh v1 milestone locked exactly **1 lamport**.
 
@@ -137,6 +186,8 @@ The program validation rules were not weakened.
 - [`../fixtures/zeroclaw-trace.jsonl`](../fixtures/zeroclaw-trace.jsonl)
 - [`../fixtures/devnet-active-monitor.json`](../fixtures/devnet-active-monitor.json)
 - [`../fixtures/devnet-fair-lifecycle.json`](../fixtures/devnet-fair-lifecycle.json)
+- [`../fixtures/devnet-v2-lifecycle.json`](../fixtures/devnet-v2-lifecycle.json)
+- [`../fixtures/prazopay-v2.so`](../fixtures/prazopay-v2.so)
 
 The proactive no-prompt heartbeat and Discord delivery are documented
 separately in [`ACTIVE_MONITOR.md`](ACTIVE_MONITOR.md).
@@ -148,6 +199,8 @@ separately in [`ACTIVE_MONITOR.md`](ACTIVE_MONITOR.md).
 | `zeroclaw-trace.jsonl` | `a9190a53ab289390848870b3aebe3722dd5a54a44fba345c2e7e00a7497eff7d` |
 | `devnet-active-monitor.json` | `5a5429dfcd8befce236a2bb42df16f9907abe20da166f09bbf99626633a34ed1` |
 | `devnet-fair-lifecycle.json` | `c4f1a2f309da7c3beae10710003ed881f29db475254d0fe06dd97f40d811ef8f` |
+| `devnet-v2-lifecycle.json` | `a4f00fea61583308106138b45c001d605cfadca1c41248eb44fad37e9c276862` |
+| `prazopay-v2.so` | `a54c676c98f526425ba77b54cfdb64a6ddddab2cf218d12f732dfa95bb4d8294` |
 
 ## Security boundary observed
 

@@ -1,12 +1,24 @@
 ---
 name: prazopay-operator
-description: Inspect and proactively monitor PrazoPay milestone escrow state on public Solana devnet. Use when a Discord operator supplies a milestone PDA, asks whether a milestone is open, submitted, paid, or refunded, asks which human signer may safely take the next protocol action, or runs the PrazoPay active-monitor heartbeat workflow.
+description: Inspect and proactively monitor PrazoPay v2 Agreement negotiation or milestone escrow state on public Solana devnet. Use when a Discord operator supplies an Agreement or Milestone PDA, asks which signer may take the next protocol action, or runs either PrazoPay active-monitor heartbeat workflow.
 ---
 
 # PrazoPay Operator
 
-Use `prazopay_status` for every factual milestone answer. Never infer chain state
-from chat history, a screenshot, or a claimed transaction signature.
+Use `prazopay_agreement_status` for Agreement facts and `prazopay_status` for
+Milestone facts. Never infer chain state from chat history, a screenshot, or a
+claimed transaction signature.
+
+## Inspect an Agreement
+
+1. Require one base58 Agreement PDA from the operator.
+2. Call `prazopay_agreement_status` with cluster `devnet`, that `agreement`,
+   and bounded alert and poll values.
+3. Report the exact committed parties, amount, terms hash, windows, expiry,
+   phase, allowed signer actions, reason codes, and monitor decision.
+4. Make clear that `Proposed` and `Accepted` lock no milestone amount. Only a
+   successful `fund_accepted_agreement` atomically creates and funds the v2
+   Milestone.
 
 ## Inspect a milestone
 
@@ -39,6 +51,27 @@ monitor exception is always English.
 
 ## Active-monitor heartbeat workflow
 
+When the turn begins with `Act as the PrazoPay v2 Journey Monitor`:
+
+1. Call `prazopay_agreement_status` exactly once with the Agreement and timing
+   fields from the heartbeat prompt.
+2. Use only its `monitor` object. Return `NO_REPLY` when `should_notify` is
+   false.
+3. For `Proposed`, notify the Worker to independently verify the terms
+   commitment and sign either `accept_agreement` or `reject_agreement`.
+4. For `Accepted`, notify only the Funder that funding is allowed before
+   `funding_expires_at` and that funding starts the full delivery window.
+5. For `Funded`, take the exact non-null `milestone` from the Agreement tool
+   result and call `prazopay_status` exactly once. If the Milestone does not
+   yet require its own alert, emit one non-terminal `PrazoPay Escrow Funded`
+   handoff card using the stable Agreement event ID; the relay deduplicates it.
+   Never call it a final outcome or ask a human to reinstall monitoring.
+6. Treat rejection, proposal expiry, and funding-window expiry as terminal
+   Agreement outcomes. Treat only `SETTLEMENT_SUCCESS` or `MILESTONE_FAILED`
+   from the linked Milestone as terminal after funding.
+7. Output must be compact English, shorten party addresses, and display the
+   complete 64-character terms hash so the Worker can compare it.
+
 When the turn begins with `Act as the PrazoPay Active Monitor`:
 
 1. Call `prazopay_status` exactly once using the milestone,
@@ -59,14 +92,15 @@ When the turn begins with `Act as the PrazoPay Active Monitor`:
 when the relevant state, revision, action boundary, or sparse reminder stage
 changes. ZeroClaw polls at the configured heartbeat cadence, but the tool emits
 alerts only on state entry, deadline boundaries, and sparse escalation windows
-(immediate, 30 minutes, 2 hours, then daily). The host-side relay commits an
+(state entry, 30 minutes, 2 hours, then daily). The host-side relay commits an
 `event_id` only after Discord delivery succeeds and suppresses committed IDs
 across restarts. Delivery remains at least once rather than exactly once because
 a crash between remote acceptance and the local commit can still repeat a
 message.
 
 The heartbeat must run as the `creator` agent under a risk profile that allows
-only `prazopay_status`. It must disable the speculative two-phase pre-check and
+only `prazopay_agreement_status` and `prazopay_status` for a v2 journey (or only
+`prazopay_status` for a Milestone-only monitor). It must disable the speculative two-phase pre-check and
 Discord session-context loading, then send through the authenticated,
 loopback-only PrazoPay delivery relay. ZeroClaw owns the schedule, tool
 invocation, trace, quiet sentinel, and channel send; the relay owns only durable
@@ -101,6 +135,31 @@ Next action
 Worker F5M9...RmWw may sign submit_delivery.
 
 Verify on Solana Explorer: <account link>
+```
+
+For an Agreement proposal card, use this shape:
+
+```text
+PrazoPay Agreement Proposal
+- Protocol: v2
+- Agreement: 7faA...Yqsz
+- Status: PROPOSED
+- Phase: awaiting_worker
+- Amount: 1 lamport
+- Delivery window: 3600 seconds
+- Review window: 600 seconds
+- Funder: CkNm...6ZF8
+- Worker: F5M9...RmWw
+- Terms: ab12...90ef
+- Event: AGREEMENT_ACCEPTANCE_REQUIRED
+- Reminder stage: state_entry
+Event ID: prazopay:12ab34cd...
+
+Next action
+No milestone funds are locked. Worker F5M9...RmWw must verify the terms
+commitment, then sign accept_agreement or reject_agreement before expiry.
+
+Verify on Solana Explorer: <Agreement account link>
 ```
 
 For an active alert, use this shape:
