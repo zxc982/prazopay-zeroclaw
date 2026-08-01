@@ -135,6 +135,10 @@ bash -n scripts/zeroclaw-prazopay-approval.sh
 bash -n scripts/zeroclaw-prazopay-skill.sh
 bash -n scripts/verify-devnet-live.sh
 bash -n scripts/verify-devnet-v2-live.sh
+test -f skills/prazopay/SKILL.md
+grep -Fqx 'name: prazopay' skills/prazopay/SKILL.md
+test ! -e skills/prazopay/agents/openai.yaml
+echo "ZEROCLAW_SKILL_LAYOUT=PASS"
 python3 -m unittest discover -s scripts/tests -p 'test_*.py'
 python3 scripts/verify_public_evidence.py
 

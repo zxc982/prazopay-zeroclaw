@@ -1,9 +1,9 @@
 ---
-name: prazopay-operator
+name: prazopay
 description: Inspect and proactively monitor PrazoPay v2 Agreement negotiation or milestone escrow state on public Solana devnet. Use when a Discord operator supplies an Agreement or Milestone PDA, asks which signer may take the next protocol action, or runs either PrazoPay active-monitor heartbeat workflow.
 ---
 
-# PrazoPay Operator
+# PrazoPay
 
 Use `prazopay_agreement_status` for Agreement facts and `prazopay_status` for
 Milestone facts. Never infer chain state from chat history, a screenshot, or a
@@ -166,8 +166,8 @@ For an active alert, use this shape:
 
 ```text
 PrazoPay Active Alert
-- Protocol: v1
-- Acceptance: explicit_silence_acceptance
+- Protocol: v2
+- Acceptance: worker_signed_silence_acceptance
 - Milestone: 7faA...Yqsz
 - Status: SUBMITTED
 - Event: FUNDER_REVIEW_REQUIRED

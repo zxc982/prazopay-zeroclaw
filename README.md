@@ -20,6 +20,18 @@ original Funder.
 
 > Lock the money. Lock the deadline. Remove the ghosting.
 
+## Why v2 exists
+
+| | Legacy v1 | Current v2 |
+| --- | --- | --- |
+| Before escrow | Funder creates a Milestone directly | Funder proposes an Agreement without locking SOL |
+| Worker consent | No separate pre-funding acceptance state | The exact named Worker must sign the committed terms |
+| Funding clock | Starts with Milestone creation | Starts only after Worker acceptance, inside a fresh funding window |
+| Role today | Backward-compatibility fixture and historical evidence | Deployed Agreement-first protocol and primary submission |
+
+The retained v1 fixture proves that the compatible upgrade still decodes and
+executes historical accounts. It is not an alternate current workflow.
+
 ## Protocol lifecycle
 
 ```mermaid
@@ -109,6 +121,28 @@ ZeroClaw is a coordinator, never a custodian:
   program's deterministic revision rule); and
 - no wallet key, seed phrase, or signing endpoint is exposed to ZeroClaw.
 
+## Install the native ZeroClaw Skill
+
+PrazoPay ships a native [`SKILL.md`](skills/prazopay/SKILL.md) named
+`prazopay`. It constrains the agent to finalized devnet facts, the two read-only
+WASM tools, shortened public addresses in Discord prose, and human-signed or
+permissionless protocol actions that cannot select a recipient.
+
+Audit and install it with ZeroClaw:
+
+```bash
+zeroclaw skills audit ./skills/prazopay
+zeroclaw skills install ./skills/prazopay
+zeroclaw skills list
+```
+
+The active Creator configuration selects the same bundle name:
+
+```bash
+./scripts/zeroclaw-prazopay-skill.sh enable \
+  "$HOME/.config/zeroclaw-entrega/creator"
+```
+
 ## Reproduce from a clean checkout
 
 No wallet, Discord bot, model API key, or Solana deployment keypair is required.
@@ -132,7 +166,8 @@ The final line is `REPRODUCE=PASS`. The command checks formatting, all Rust
 workspace tests, a fresh v2 SBF build, the complete Worker-acceptance lifecycle
 against that SBF in LiteSVM, the WASI Preview 2 status component, mandatory
 component validation, path-independent byte-exact WASM comparison, Bash syntax,
-relay tests, and historical v1 fixture consistency.
+relay tests, native ZeroClaw Skill layout, and historical v1 fixture
+consistency.
 
 See [`docs/REPRODUCE.md`](docs/REPRODUCE.md) for prerequisites, expected output,
 the verification map, and independent public-chain checks.
@@ -186,8 +221,10 @@ and actual signer sets without any wallet.
 
 See the [live v2 evidence](docs/DEVNET_EVIDENCE.md),
 [machine-readable fixture](fixtures/devnet-v2-lifecycle.json),
-[read-only verifier](scripts/verify_devnet_v2_live.py), and the historical
-[active-monitor record](docs/ACTIVE_MONITOR.md).
+[read-only verifier](scripts/verify_devnet_v2_live.py), and the current
+[v2 active-monitor design](docs/ACTIVE_MONITOR.md). Historical v1 and v0
+monitor runs are isolated as
+[legacy compatibility evidence](docs/history/V1_ACTIVE_MONITOR.md).
 
 - [v2 upgrade](https://explorer.solana.com/tx/2tyAdkSNL7WfjzE31yoGSPCLuL2uCJWWip96LDATbHQCLqW7UWtFTG7RXWDnDiQhmQspWcCtP3rgZ1RuEfX9ZGpA?cluster=devnet)
 - [Agreement](https://explorer.solana.com/address/Cg3xWCC4SiCEshSLcMSt6GGWSpb25zAhv9iTXuuBXeaW?cluster=devnet)
@@ -214,7 +251,8 @@ scripts/verify-devnet-live.* Read-only live-chain verification
 scripts/verify-devnet-v2-live.* Current v2 live-chain verification
 scripts/zeroclaw-prazopay-monitor.sh
 scripts/zeroclaw-prazopay-agreement-monitor.sh
-fixtures/prazopay-v1.so     Exact SBF used by clean-room LiteSVM tests
+skills/prazopay/SKILL.md    Native ZeroClaw operator and monitor policy
+fixtures/prazopay-v1.so     Legacy compatibility SBF used by LiteSVM tests
 fixtures/prazopay-v2.so     Exact currently deployed v2 SBF
 docs/PROTOCOL.md            v2 Agreement and Milestone state machines
 docs/COMMUNICATION.md       Signed communication commitments and Discord role
@@ -223,7 +261,8 @@ docs/PROMPT_INJECTION_TRANSCRIPT.md
                             Actual locked-down ZeroClaw injection transcript
 docs/COMPETITIVE_POSITIONING.md
 docs/TEST_SCENARIOS.md      Normal, boundary, adversarial, and monitor suites
-docs/ACTIVE_MONITOR.md      Proactive devnet-to-Discord evidence
+docs/ACTIVE_MONITOR.md      Current v2 journey monitor and demo sequence
+docs/history/               Clearly segregated v1/v0 runtime evidence
 docs/LOCAL_VERIFICATION.md  Local verification scope and recorded evidence
 docs/DEVNET_EVIDENCE.md     Devnet deployment and real ZeroClaw evidence
 docs/REPRODUCE.md           One-command clean-checkout instructions

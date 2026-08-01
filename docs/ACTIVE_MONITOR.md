@@ -1,168 +1,93 @@
-# ZeroClaw active monitor
+# ZeroClaw v2 active monitor
 
 Date: 2026-08-01
 
-## Protocol-v2 Agreement journey monitor
+## Evidence scope
 
-The deployed v2 workflow adds `prazopay_agreement_status` and a dedicated wrapper:
+PrazoPay v2 has a finalized public Agreement-to-paid-Milestone lifecycle. The
+checked-in monitor, relay, WASM tools, and native `prazopay` ZeroClaw Skill
+implement the matching read-only journey. A fresh v2 Discord journey trace will
+be captured with the replacement demo video; it is not represented by the
+legacy screenshots or message IDs.
+
+Historical v1 and v0 monitor runs remain available only as
+[legacy compatibility evidence](history/V1_ACTIVE_MONITOR.md). They are not the
+current Agreement-first policy.
+
+## Agreement-to-Milestone journey
+
+Install or replace the v2 journey monitor:
 
 ```bash
 bash ./scripts/zeroclaw-prazopay-agreement-monitor.sh \
   install AGREEMENT_PDA DISCORD_CHANNEL_ID
 ```
 
-It reads only finalized Agreement state and produces compact English cards for:
+The heartbeat reads finalized Agreement state through
+`prazopay_agreement_status` and produces compact English cards for:
 
-- `PROPOSED`: Worker verifies the committed terms and may accept or reject;
+- `PROPOSED`: the Worker verifies the committed terms and may accept or reject;
 - `ACCEPTED`: only the Funder may fund before the independent funding expiry;
 - `REJECTED` or derived expiry: one final no-funds-locked card; and
-- `FUNDED`: the same heartbeat follows the Milestone PDA stored in the
-  Agreement and calls the Milestone tool automatically. If the Milestone has
-  no actionable alert yet, one deduplicated, non-terminal `Escrow Funded`
-  handoff card confirms that monitoring continued.
+- `FUNDED`: the same heartbeat follows the exact Milestone PDA stored in the
+  Agreement and calls `prazopay_status` automatically.
 
-The relay closes only after an Agreement is rejected/expires or the linked
-Milestone reaches one terminal outcome. The Agreement tool reports
-`milestone_created`, not `funds_locked`, because only the linked Milestone tool
-can determine whether escrow remains live after funding.
+If a funded Milestone has no actionable alert yet, the relay emits one
+deduplicated, non-terminal `Escrow Funded` handoff card. Monitoring continues
+without asking a human to reinstall it. The journey closes only after an
+Agreement is rejected or expires, or the linked Milestone reaches one terminal
+outcome.
 
-Reminder stages come from on-chain `proposed_at`, `accepted_at`, and
-the active proposal or funding boundary: state entry, 30 minutes, 2 hours,
-daily, and the deadline boundary.
-
-Protocol v2 now has a finalized Agreement-to-paid-Milestone public lifecycle.
-The runtime records below remain the earlier v1 ZeroClaw monitor evidence until
-a separate v2 journey-monitor trace is captured.
+The Agreement tool reports `milestone_created`, not `funds_locked`, because
+only the linked Milestone tool can determine whether escrow remains live after
+funding.
 
 ## What ZeroClaw does
 
 PrazoPay's Solana program enforces custody, roles, deadlines, review windows,
-and settlement. ZeroClaw supplies the missing operational loop:
+and settlement. ZeroClaw supplies the operational loop:
 
 ```text
 ZeroClaw heartbeat
-  -> read one public devnet milestone through prazopay_status
-  -> validate owner, discriminator, length, state, and Solana block time
-  -> derive the currently responsible role and allowed protocol actions
+  -> read the public v2 Agreement through prazopay_agreement_status
+  -> validate owner, discriminator, length, state, and Solana time
+  -> follow the linked Milestone through prazopay_status after funding
+  -> derive the responsible role and currently permitted actions
   -> suppress quiet observations with NO_REPLY
-  -> deliver an actionable English Discord alert at a policy window
-  -> wait for the correct human wallet to sign
-  -> observe the resulting state transition on the next heartbeat
+  -> deliver one actionable English Discord card at a policy window
+  -> wait for the correct human wallet or permissionless trigger
+  -> observe the finalized state transition on the next heartbeat
   -> deliver one terminal SUCCESS or FAILED card, then stop
 ```
 
-This is not a chatbot waiting to be mentioned. The schedule, native WASM tool
-invocation, runtime trace, quiet sentinel, and Discord delivery all belong to
-ZeroClaw.
-
-## Current v1 live devnet proof
-
-The fair-settlement demo locked exactly one lamport in a fresh v1 milestone:
-
-- [milestone account](https://explorer.solana.com/address/ikUaYZUARH3KXK9y98MgfgSVsZJu3tcgHfgeKnCTTqB?cluster=devnet)
-- [create transaction](https://explorer.solana.com/tx/2Eaf8P85jm5YhfsRg9akqKGgMqHf44BZ9PWxXbigSLKkUQgc1hRJAonr5Hx9UZZgmDpM3eSfyc5qzXPk2YjrA8cY?cluster=devnet)
-- [submit transaction](https://explorer.solana.com/tx/3KoickzBmXxBbWpEpPn96CvnbpvW2po2Yz9ZdWA8162ZDCJWWvEuJa9EComt9mcsUrDZuc64Q7kJEata3rqUQh4p?cluster=devnet)
-- [permissionless settlement transaction](https://explorer.solana.com/tx/2AZLiK1TaQ3GRFWpvkkbvHaQhXQJyr4Kz4TywZHJgKYCnkY3hJtyhDSqTvVZbjAYt3MqUUaLvFQbvKS12TJAQrBJ?cluster=devnet)
-
-After the Funder review window and claim grace elapsed, the Creator heartbeat
-called the native status component without a Discord prompt and produced:
-
-```text
-event: PERMISSIONLESS_SETTLEMENT_READY
-responsible_role: permissionless_trigger
-allowed_actions: approve_milestone, claim_after_review, settle_after_review
-worker_overdue: false
-```
-
-The alert explained that any account may trigger settlement, while the Solana
-program can transfer the locked amount only to the immutable Worker. A
-third-party trigger then called `settle_after_review`; the milestone became
-`PAID`, and the Worker balance increased by exactly one lamport.
-
-The next heartbeat produced one `PrazoPay Final Outcome` card:
-
-```text
-event: SETTLEMENT_SUCCESS
-status: paid
-outcome: success
-responsible_role: both
-continue_monitoring: true
-```
-
-The card named both shortened parties and stated that it was the final
-notification. Under the durable delivery workflow, `continue_monitoring: true`
-keeps the same final event retryable until the loopback relay confirms a
-successful Discord send. The relay then commits the event ID, closes that
-milestone, and disables the heartbeat. Both Creator and Worker Discord channel
-doctors remained healthy.
-
-The machine-readable record is
-[`../fixtures/devnet-fair-lifecycle.json`](../fixtures/devnet-fair-lifecycle.json).
-
-## Historical v0 compatibility proof
-
-The active-monitor test created and submitted a new milestone that locked one
-lamport:
-
-- [milestone account](https://explorer.solana.com/address/gjnjUCGw33rDXWP66ztrR8KiX13DZWStkj3jR5LuhV8?cluster=devnet)
-- [create transaction](https://explorer.solana.com/tx/hSUHxE8rsS7b1KzeYqQPgNB5wKqGRw3huZ4KP4RzS6xUgbMFmcv4D8hB8oLnTVUPzpvfBAp8gQHUmp2Xz31Lvzk?cluster=devnet)
-- [submit transaction](https://explorer.solana.com/tx/2mfcM66ZGJJucrCgpW7yVWBj5boxd6v46myx84d1aU3VEUvgpqx1KcDqWHJpb8Qa7mBVVeKsSH7jGigqCe6FrYrb?cluster=devnet)
-
-Without a Discord prompt, the Creator heartbeat read slot `479874165` and
-emitted:
-
-```text
-event: FUNDER_REVIEW_REQUIRED
-responsible_role: funder
-allowed_actions: approve_milestone, request_revision
-event_id: prazopay:21498f1ac097a294b16e17570ba0fe6a
-Discord message: 1532213551857668266
-```
-
-After the immutable review boundary elapsed, a later heartbeat read slot
-`479874716`. This public milestone is `v0_legacy`, so the next permitted role
-changed immediately:
-
-```text
-event: WORKER_CLAIM_READY
-responsible_role: worker
-allowed_actions: approve_milestone, claim_after_review
-event_id: prazopay:17194f928a067a7fbedf1b8ff0a4d6cf
-```
-
-The event changed because the chain's action boundary changed, not because the
-model guessed that time had passed.
-
-This earlier run documents backward-compatible `v0_legacy` behavior. It is not
-the current v2 Agreement-first policy.
-
-Its machine-readable record is
-[`../fixtures/devnet-active-monitor.json`](../fixtures/devnet-active-monitor.json).
+This is not a chatbot waiting to be mentioned. ZeroClaw owns the schedule,
+native WASM invocation, trace, quiet sentinel, and channel send. The loopback
+relay owns only durable delivery acknowledgement and duplicate suppression.
 
 ## Least-authority runtime
 
-The dedicated Creator heartbeat is configured with:
+The dedicated Creator heartbeat uses:
 
 ```text
 agent: creator
+skill bundle: [prazopay]
 interval: 5 minutes
 two_phase: false
 load_session_context: false
-allowed_tools: [prazopay_status]
+allowed_tools: [prazopay_agreement_status, prazopay_status]
 delivery: ZeroClaw webhook -> loopback relay -> ZeroClaw Discord send
 ```
 
 Disabling Discord session-context loading prevents channel messages from
 becoming monitor instructions. Disabling the speculative first phase ensures
-each tick reaches the deterministic status tool. The risk profile retains one
-read-only tool: no shell, browser, memory write, wallet, signer, transaction
-builder, or scheduler mutation is available.
+each tick reaches the deterministic status tool. The risk profile exposes only
+the two read-only PrazoPay tools: no shell, browser, memory write, wallet,
+signer, transaction builder, broadcaster, or scheduler mutation is available.
 
-Install or replace a monitor:
+Enable the checked-in Skill bundle with:
 
 ```bash
-./scripts/zeroclaw-prazopay-monitor.sh install \
-  <MILESTONE_PDA> <DISCORD_CHANNEL_ID> 5 300 \
+./scripts/zeroclaw-prazopay-skill.sh enable \
   "$HOME/.config/zeroclaw-entrega/creator"
 ```
 
@@ -172,8 +97,8 @@ configured interval before its first heartbeat tick.
 ## Honest delivery semantics
 
 The five-minute value is a **polling interval**, not a promise to send a message
-every five minutes. The status tool uses Solana time and the supplied poll
-interval to open sparse alert windows:
+every five minutes. The status tools use finalized Solana time and open sparse
+alert windows only at:
 
 - state entry;
 - approaching and final deadline boundaries;
@@ -181,49 +106,40 @@ interval to open sparse alert windows:
 - first delay, 30-minute, and 2-hour unresolved-action escalation; and
 - one window per day thereafter.
 
-Worker delivery delay and Funder review delay use the same sparse schedule.
-Once v1 silence settlement becomes permissionless, the Worker is not described
-as late for failing to submit the settlement transaction.
-
-All other polls return `should_notify = false` and become `NO_REPLY`. Every
-outbound monitor message is English. A stage-bound `event_id` lets the relay
-deduplicate retries within the same alert window and after process restarts.
+Worker delivery delay and Funder review delay use the same sparse schedule. All
+other polls return `should_notify = false` and become `NO_REPLY`. Every outbound
+monitor message is English. A stage-bound `event_id` lets the relay deduplicate
+retries within the same alert window and after process restarts.
 
 Notifications remain **at least once**, not exactly once. ZeroClaw v0.8.3
 creates a fresh WASM store for each tool call and exposes no persistent
-file/memory host function to this plugin. The host-side PrazoPay relay therefore
-accepts only authenticated loopback webhook output, sends it with ZeroClaw's
-Discord channel command, and atomically commits the event ID only after that
-command succeeds. The state survives relay and daemon restarts.
+file/memory host function to the plugins. The host-side relay therefore accepts
+only authenticated loopback webhook output, sends it with ZeroClaw's Discord
+channel command, and atomically commits the event ID only after that command
+succeeds.
 
-The model cannot prove that a previous Discord delivery was seen. A crash in
-the narrow interval after Discord accepts the message but before the relay
-commits its local state can still repeat an alert; exactly once is not claimed.
-A provider or RPC outage generates a sparse degraded alert at the first
-failure, 30 minutes, 2 hours, then daily, followed by one recovery card after a
-successful read. It cannot silently exhaust a terminal notification window.
-None of those failures can redirect or release
-escrow because ZeroClaw has no signing capability and the Solana program remains
-the sole settlement authority.
+A crash after Discord accepts a message but before the relay commits its local
+state can repeat an alert; exactly once is not claimed. A provider or RPC outage
+generates a sparse degraded alert at the first failure, 30 minutes, 2 hours,
+then daily, followed by one recovery card after a successful read. Those
+failures cannot redirect or release escrow because ZeroClaw has no signing
+capability and the Solana program remains the sole settlement authority.
 
-When the milestone becomes terminal, the tool returns
-`continue_monitoring = true` with the same stable final event on every
-observation. After a successful Discord send, the relay persists the
-acknowledgement, marks the milestone closed, disables the heartbeat, and
-suppresses every later message. No review, delay, or terminal reminder is sent
-after that final card.
+When the journey becomes terminal, the tool keeps the stable final event
+retryable until Discord delivery succeeds. The relay then persists the
+acknowledgement, marks the journey closed, disables the heartbeat, and
+suppresses every later message.
 
-## Judge demo sequence
+## Replacement demo sequence
 
-1. Open the live milestone in Solana Explorer and show `SUBMITTED`.
-2. Show the Creator policy retaining only `prazopay_status`.
-3. Start the Creator daemon and do not send a Discord message.
-4. Wait for the proactive English alert and point out the protocol version,
-   reminder stage, event ID, responsible role, allowed actions, and Explorer
-   link.
-5. Let any test trigger submit `settle_after_review`; point out that the
-   immutable Worker is the only possible recipient.
-6. Show the real transaction and exact Worker balance delta in Explorer.
-7. On the next heartbeat, show one final two-party SUCCESS card.
-8. Show the relay's closed state and confirm that no further reminders are
-   emitted.
+1. Show the public v2 Agreement in `PROPOSED` and its complete terms commitment.
+2. Show the proactive Worker acceptance card without mentioning the bot.
+3. Let the immutable Worker sign `accept_agreement`; show `ACCEPTED` on-chain.
+4. Show the Funder funding card and atomic `fund_accepted_agreement`
+   transaction that creates the linked Milestone.
+5. Show the non-terminal `Escrow Funded` handoff and continued monitoring.
+6. Let the Worker sign `submit_delivery`; show the Funder review card.
+7. Let the Funder approve, or demonstrate the agreed silence path with a
+   permissionless trigger that cannot change the Worker recipient.
+8. Show the real terminal transaction, exact Worker balance delta, one final
+   two-party SUCCESS card, and the relay's closed state.

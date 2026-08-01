@@ -90,6 +90,7 @@ fixtures/prazopay-v1.so: OK
 DEPLOYED_V1_FIXTURE_HASH=PASS
 WASM_SOURCE_ARTIFACT=PASS components=2
 WASM_VALIDATE=PASS components=2
+ZEROCLAW_SKILL_LAYOUT=PASS
 PUBLIC_EVIDENCE=PASS
 REPRODUCE=PASS
 ```
@@ -108,6 +109,7 @@ Every line is required.
 | WASM components | both read-only tools build from a fresh target for WASI Preview 2 with project, Cargo Home, and target paths remapped to stable virtual prefixes; rebuilt and committed components pass `wasm-tools validate` and must match byte for byte |
 | delivery reliability | Python relay acknowledgement and deduplication tests |
 | scripts | Bash syntax checks for monitor, relay, approval, skill, and verifier |
+| native ZeroClaw Skill | `skills/prazopay/SKILL.md` exists, declares the installed bundle name `prazopay`, and contains no unrelated OpenAI agent metadata |
 | public evidence | fixture metadata and hashes are internally consistent |
 
 ## Read-only live v2 verification
