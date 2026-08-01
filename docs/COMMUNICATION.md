@@ -32,6 +32,11 @@ cannot invent an accepted term or approve a payment.
 7. ZeroClaw sends alerts only at actionable state changes and sparse escalation
    points; one final card closes monitoring.
 
+Worker acceptance is always an explicit on-chain transaction signed by the
+named Worker. `silence_acceptance` applies only after delivery during the
+Funder review phase; it never accepts an Agreement, replaces the Worker
+signature, or turns proposal expiry into consent.
+
 The deployed v2 workflow implements this as two least-privilege read-only tools:
 
 - `prazopay_agreement_status` monitors proposal, Worker acceptance/rejection,

@@ -30,6 +30,13 @@ FAILURE_PATTERN = re.compile(r"^NO_REPLY\[FAIL\]:\s*([A-Z0-9_]{3,64})$")
 HEALTH_STAGE_PATTERN = re.compile(r"^(?:first|30m|2h|day_[1-9][0-9]*)$")
 DISCORD_CHANNEL_PATTERN = re.compile(r"^[0-9]{17,20}$")
 MAX_REQUEST_BYTES = 64 * 1024
+AGREEMENT_ACCEPTANCE_GUARD = (
+    "Worker acceptance requires an explicit accept_agreement transaction "
+    "signed by the named Worker."
+)
+SILENCE_POLICY_GUARD = (
+    "Silence acceptance applies only after delivery during the Funder review phase."
+)
 
 
 class StateStore:
@@ -176,6 +183,22 @@ class DeliveryProcessor:
                 return (
                     HTTPStatus.UNPROCESSABLE_ENTITY,
                     "Agreement Explorer URL is missing or does not match the monitored address",
+                )
+
+        if (
+            "PrazoPay Agreement Proposal" in content
+            or "PrazoPay Agreement Accepted" in content
+        ):
+            normalized = content.replace("`", "")
+            if AGREEMENT_ACCEPTANCE_GUARD not in normalized:
+                return (
+                    HTTPStatus.UNPROCESSABLE_ENTITY,
+                    "Agreement card does not require explicit Worker-signed acceptance",
+                )
+            if SILENCE_POLICY_GUARD not in normalized:
+                return (
+                    HTTPStatus.UNPROCESSABLE_ENTITY,
+                    "Agreement card does not constrain silence acceptance to Funder review",
                 )
 
         with self.state_store.lock:
