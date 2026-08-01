@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import hmac
 import json
 import logging
@@ -12,6 +13,7 @@ import re
 import subprocess
 import tempfile
 import threading
+import time
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -19,7 +21,13 @@ from typing import Callable
 
 
 EVENT_ID_PATTERN = re.compile(r"\bprazopay:[0-9a-f]{32}\b")
-TERMINAL_EVENT_PATTERN = re.compile(r"\b(?:SETTLEMENT_SUCCESS|MILESTONE_FAILED)\b")
+TERMINAL_EVENT_PATTERN = re.compile(
+    r"\b(?:SETTLEMENT_SUCCESS|MILESTONE_FAILED|AGREEMENT_REJECTED|"
+    r"AGREEMENT_EXPIRED|AGREEMENT_PROPOSAL_EXPIRED|"
+    r"AGREEMENT_FUNDING_WINDOW_EXPIRED)\b"
+)
+FAILURE_PATTERN = re.compile(r"^NO_REPLY\[FAIL\]:\s*([A-Z0-9_]{3,64})$")
+HEALTH_STAGE_PATTERN = re.compile(r"^(?:first|30m|2h|day_[1-9][0-9]*)$")
 DISCORD_CHANNEL_PATTERN = re.compile(r"^[0-9]{17,20}$")
 MAX_REQUEST_BYTES = 64 * 1024
 
@@ -66,6 +74,26 @@ class StateStore:
                 or terminal_event_id not in event_ids
             ):
                 raise ValueError("closed delivery state has no valid terminal event")
+        health = state.get("monitor_health")
+        if health is not None:
+            if (
+                not isinstance(health, dict)
+                or health.get("status") != "degraded"
+                or not isinstance(health.get("degraded_since"), int)
+                or health["degraded_since"] < 0
+                or not isinstance(health.get("failure_code"), str)
+                or re.fullmatch(r"[A-Z0-9_]{3,64}", health["failure_code"])
+                is None
+                or not isinstance(health.get("delivered_stages"), list)
+                or any(
+                    not isinstance(stage, str)
+                    or HEALTH_STAGE_PATTERN.fullmatch(stage) is None
+                    for stage in health["delivered_stages"]
+                )
+                or len(health["delivered_stages"])
+                != len(set(health["delivered_stages"]))
+            ):
+                raise ValueError("delivery state contains invalid monitor health")
         return state
 
     def save(self, state: dict) -> None:
@@ -84,11 +112,14 @@ class StateStore:
                 handle.flush()
                 os.fsync(handle.fileno())
             os.replace(temporary_path, self.path)
-            directory_descriptor = os.open(self.path.parent, os.O_RDONLY)
-            try:
-                os.fsync(directory_descriptor)
-            finally:
-                os.close(directory_descriptor)
+            # Windows cannot open a directory with os.open(O_RDONLY). Atomic
+            # replace plus the file fsync above is the strongest portable path.
+            if os.name != "nt":
+                directory_descriptor = os.open(self.path.parent, os.O_RDONLY)
+                try:
+                    os.fsync(directory_descriptor)
+                finally:
+                    os.close(directory_descriptor)
         finally:
             if temporary_path.exists():
                 temporary_path.unlink()
@@ -101,24 +132,51 @@ class DeliveryProcessor:
         sender: Callable[[str, str], bool],
         disable_heartbeat: Callable[[], bool],
         expected_recipient: str,
+        clock: Callable[[], float] = time.time,
     ) -> None:
         self.state_store = state_store
         self.sender = sender
         self.disable_heartbeat = disable_heartbeat
         self.expected_recipient = expected_recipient
+        self.clock = clock
 
     def process(self, content: str, recipient: str) -> tuple[int, str]:
         stripped = content.strip()
-        if stripped.upper().startswith("NO_REPLY"):
-            return HTTPStatus.OK, "quiet output suppressed"
         if recipient != self.expected_recipient:
             return HTTPStatus.BAD_REQUEST, "recipient does not match configured Discord channel"
+
+        failure = FAILURE_PATTERN.fullmatch(stripped.upper())
+        if failure is not None:
+            with self.state_store.lock:
+                return self._process_failure_locked(failure.group(1), recipient)
+        if stripped.upper() == "NO_REPLY":
+            with self.state_store.lock:
+                return self._process_quiet_locked(recipient)
+        if stripped.upper().startswith("NO_REPLY"):
+            return HTTPStatus.UNPROCESSABLE_ENTITY, "quiet output format is invalid"
 
         event_match = EVENT_ID_PATTERN.search(content)
         if event_match is None:
             return HTTPStatus.UNPROCESSABLE_ENTITY, "PrazoPay event_id is missing"
         event_id = event_match.group(0)
         terminal = TERMINAL_EVENT_PATTERN.search(content) is not None
+
+        agreement_headings = (
+            "PrazoPay Agreement Proposal",
+            "PrazoPay Agreement Accepted",
+            "PrazoPay Agreement Closed",
+            "PrazoPay Escrow Funded",
+        )
+        if any(heading in content for heading in agreement_headings):
+            expected_explorer = (
+                "https://explorer.solana.com/address/"
+                f"{self.state_store.milestone}?cluster=devnet"
+            )
+            if expected_explorer not in content:
+                return (
+                    HTTPStatus.UNPROCESSABLE_ENTITY,
+                    "Agreement Explorer URL is missing or does not match the monitored address",
+                )
 
         with self.state_store.lock:
             state = self.state_store.load()
@@ -130,6 +188,10 @@ class DeliveryProcessor:
                     )
                 return HTTPStatus.OK, "monitor already closed"
             if event_id in delivered:
+                if state.get("monitor_health") is not None:
+                    recovery = self._recovery_card(state, recipient)
+                    if recovery is not None:
+                        return recovery
                 return HTTPStatus.OK, "duplicate event suppressed"
             if not self.sender(content, recipient):
                 return HTTPStatus.SERVICE_UNAVAILABLE, "Discord delivery failed; retry required"
@@ -138,6 +200,7 @@ class DeliveryProcessor:
             if terminal:
                 state["closed"] = True
                 state["terminal_event_id"] = event_id
+            state.pop("monitor_health", None)
             self.state_store.save(state)
 
             if terminal and not self.disable_heartbeat():
@@ -147,6 +210,104 @@ class DeliveryProcessor:
                 )
 
         return HTTPStatus.OK, "event delivered and committed"
+
+    def _process_failure_locked(self, failure_code: str, recipient: str) -> tuple[int, str]:
+        state = self.state_store.load()
+        if state["closed"]:
+            if not self.disable_heartbeat():
+                logging.warning("monitor is closed, but heartbeat config still could not be disabled")
+            return HTTPStatus.OK, "monitor already closed"
+
+        now = max(0, int(self.clock()))
+        health = state.get("monitor_health")
+        if health is None:
+            health = {
+                "status": "degraded",
+                "degraded_since": now,
+                "failure_code": failure_code,
+                "delivered_stages": [],
+            }
+            state["monitor_health"] = health
+            self.state_store.save(state)
+        elif health["failure_code"] != failure_code:
+            health["failure_code"] = failure_code
+
+        stage = self._health_stage(now - health["degraded_since"], health["delivered_stages"])
+        if stage is None:
+            self.state_store.save(state)
+            return HTTPStatus.OK, "degraded output suppressed between sparse stages"
+
+        event_id = self._health_event_id(health["degraded_since"], stage, failure_code)
+        content = (
+            "PrazoPay Monitor Degraded\n"
+            "- Event: MONITOR_RPC_DEGRADED\n"
+            f"- Failure code: {failure_code}\n"
+            f"- Reminder stage: {stage}\n"
+            "- Protocol state: unknown; no transaction decision was inferred\n"
+            f"Event ID: {event_id}\n\n"
+            "Next action: ZeroClaw will retry on the next heartbeat. "
+            "Do not sign based on this infrastructure alert."
+        )
+        if not self.sender(content, recipient):
+            return HTTPStatus.SERVICE_UNAVAILABLE, "Discord delivery failed; retry required"
+        if event_id not in state["delivered_event_ids"]:
+            state["delivered_event_ids"].append(event_id)
+        health["delivered_stages"].append(stage)
+        self.state_store.save(state)
+        return HTTPStatus.OK, "degraded monitor alert delivered and committed"
+
+    def _process_quiet_locked(self, recipient: str) -> tuple[int, str]:
+        state = self.state_store.load()
+        if state["closed"]:
+            if not self.disable_heartbeat():
+                logging.warning("monitor is closed, but heartbeat config still could not be disabled")
+            return HTTPStatus.OK, "monitor already closed"
+        recovery = self._recovery_card(state, recipient)
+        if recovery is not None:
+            return recovery
+        return HTTPStatus.OK, "quiet output suppressed"
+
+    def _recovery_card(self, state: dict, recipient: str) -> tuple[int, str] | None:
+        health = state.get("monitor_health")
+        if health is None:
+            return None
+        event_id = self._health_event_id(
+            health["degraded_since"], "recovered", health["failure_code"]
+        )
+        content = (
+            "PrazoPay Monitor Recovered\n"
+            "- Event: MONITOR_RPC_RECOVERED\n"
+            f"- Previous failure: {health['failure_code']}\n"
+            "- Protocol state: read succeeded; normal monitoring resumed\n"
+            f"Event ID: {event_id}\n\n"
+            "Next action: Follow the next on-chain actionable-state card."
+        )
+        if not self.sender(content, recipient):
+            return HTTPStatus.SERVICE_UNAVAILABLE, "Discord delivery failed; retry required"
+        if event_id not in state["delivered_event_ids"]:
+            state["delivered_event_ids"].append(event_id)
+        state.pop("monitor_health", None)
+        self.state_store.save(state)
+        return HTTPStatus.OK, "monitor recovery delivered and committed"
+
+    @staticmethod
+    def _health_stage(elapsed: int, delivered_stages: list[str]) -> str | None:
+        delivered = set(delivered_stages)
+        if "first" not in delivered:
+            return "first"
+        if elapsed >= 30 * 60 and "30m" not in delivered:
+            return "30m"
+        if elapsed >= 2 * 60 * 60 and "2h" not in delivered:
+            return "2h"
+        if elapsed >= 24 * 60 * 60:
+            stage = f"day_{elapsed // (24 * 60 * 60)}"
+            if stage not in delivered:
+                return stage
+        return None
+
+    def _health_event_id(self, degraded_since: int, stage: str, failure_code: str) -> str:
+        material = f"{self.state_store.milestone}|{degraded_since}|{stage}|{failure_code}"
+        return f"prazopay:{hashlib.sha256(material.encode('utf-8')).hexdigest()[:32]}"
 
 
 class ZeroClawCommands:
@@ -161,7 +322,7 @@ class ZeroClawCommands:
             "send",
             content,
             "--channel-id",
-            "discord",
+            "discord.main",
             "--recipient",
             recipient,
             "--config-dir",

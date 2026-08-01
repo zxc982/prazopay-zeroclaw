@@ -1,0 +1,58 @@
+diff --git a/crates/zeroclaw-channels/src/orchestrator/mod.rs b/crates/zeroclaw-channels/src/orchestrator/mod.rs
+index 8c46fdd..5a9329e 100644
+--- a/crates/zeroclaw-channels/src/orchestrator/mod.rs
++++ b/crates/zeroclaw-channels/src/orchestrator/mod.rs
+@@ -7102,13 +7102,17 @@ fn build_channel_by_id(
+             anyhow::bail!("Telegram channel requires the `channel-telegram` feature");
+         }
+         #[cfg(feature = "channel-discord")]
+-        "discord" => {
++        id if id == "discord" || id.starts_with("discord.") => {
++            let alias = id.strip_prefix("discord.").unwrap_or("default");
++            if alias.is_empty() || alias.contains('.') {
++                anyhow::bail!("Invalid Discord channel alias: {id}");
++            }
+             let dc = config
+                 .channels
+                 .discord
+-                .get("default")
+-                .context("Discord channel is not configured")?;
+-            let alias = "default".to_string();
++                .get(alias)
++                .with_context(|| format!("Discord channel '{alias}' is not configured"))?;
++            let alias = alias.to_string();
+             let peer_resolver: Arc<dyn Fn() -> Vec<String> + Send + Sync> = {
+                 let cfg_arc = config_arc.clone();
+                 let alias = alias.clone();
+@@ -7139,7 +7143,7 @@ fn build_channel_by_id(
+             ))
+         }
+         #[cfg(not(feature = "channel-discord"))]
+-        "discord" => {
++        id if id == "discord" || id.starts_with("discord.") => {
+             anyhow::bail!("Discord channel requires the `channel-discord` feature");
+         }
+         #[cfg(feature = "channel-slack")]
+@@ -24104,6 +24108,22 @@ This is an example JSON object for profile settings."#;
+         }
+     }
+ 
++    #[cfg(feature = "channel-discord")]
++    #[test]
++    fn build_channel_by_id_configured_named_discord_succeeds() {
++        let mut config = Config::default();
++        config
++            .channels
++            .discord
++            .insert("main".to_string(), Default::default());
++        let config_arc = Arc::new(RwLock::new(config));
++
++        assert!(
++            build_channel_by_id(&config_arc, "discord.main").is_ok(),
++            "named Discord alias should be accepted by one-shot channel send"
++        );
++    }
++
+     #[test]
+     fn one_shot_channel_workspace_dir_uses_owning_agent_workspace() {
+         let tmp = tempfile::tempdir().unwrap();

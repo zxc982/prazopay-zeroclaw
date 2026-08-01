@@ -8,7 +8,8 @@ const PRAZOPAY_PROGRAM_ID: &str = "DjdT1wW8zEoK395yujT5ujBsDboBUFyx5LCfLBSwxAjm"
 const ACCOUNT_DATA_LEN: usize = 231;
 const MAX_REVISIONS: u8 = 3;
 const PROTOCOL_V1_FLAG: u8 = 0b1000_0000;
-const REVISION_COUNT_MASK: u8 = 0b0111_1111;
+const PROTOCOL_V2_FLAG: u8 = 0b0100_0000;
+const REVISION_COUNT_MASK: u8 = 0b0011_1111;
 const MAX_CLAIM_GRACE_SECS: u32 = 60 * 60;
 const DEFAULT_ALERT_BEFORE_SECS: u32 = 300;
 const MIN_ALERT_BEFORE_SECS: u32 = 30;
@@ -252,7 +253,7 @@ impl AccountSnapshot {
                     .ok_or(StatusError::TimeOverflow)
             })
             .transpose()?;
-        let terminal_at = (milestone.protocol_version == 1
+        let terminal_at = (milestone.protocol_version >= 1
             && matches!(
                 milestone.status,
                 MilestoneStatus::Paid | MilestoneStatus::Refunded
@@ -283,7 +284,7 @@ impl AccountSnapshot {
                 funder_actions.push("approve_milestone");
                 let review_end = review_ends_at.ok_or(StatusError::TimeOverflow)?;
                 let revision_is_available = milestone.revision_count < MAX_REVISIONS
-                    && (milestone.protocol_version == 1 || observed_at < milestone.due_at);
+                    && (milestone.protocol_version >= 1 || observed_at < milestone.due_at);
                 if observed_at < review_end && revision_is_available {
                     funder_actions.push("request_revision");
                     reason_codes.push("REVIEW_WINDOW_OPEN");
@@ -291,7 +292,7 @@ impl AccountSnapshot {
                     reason_codes.push("REVISION_UNAVAILABLE");
                 } else if observed_at < claimable_at.ok_or(StatusError::TimeOverflow)? {
                     reason_codes.push("CLAIM_GRACE_ACTIVE");
-                } else if milestone.protocol_version == 1 {
+                } else if milestone.protocol_version >= 1 {
                     worker_actions.push("claim_after_review");
                     permissionless_actions.push("settle_after_review");
                     reason_codes.push("SILENCE_ACCEPTANCE_SETTLEABLE");
@@ -323,15 +324,15 @@ impl AccountSnapshot {
             slot: self.slot,
             observed_at,
             time_source: "solana_block_time",
-            protocol_version: if milestone.protocol_version == 1 {
-                "v1"
-            } else {
-                "v0_legacy"
+            protocol_version: match milestone.protocol_version {
+                2 => "v2",
+                1 => "v1",
+                _ => "v0_legacy",
             },
-            acceptance_policy: if milestone.protocol_version == 1 {
-                "explicit_silence_acceptance"
-            } else {
-                "legacy_terms_hash_only"
+            acceptance_policy: match milestone.protocol_version {
+                2 => "worker_signed_silence_acceptance",
+                1 => "explicit_silence_acceptance",
+                _ => "legacy_terms_hash_only",
             },
             status: milestone.status,
             funder: milestone.funder.clone(),
@@ -404,12 +405,12 @@ fn monitor_decision(
                     )
                 } else {
                     (
-                        false,
                         true,
-                        "WORKER_DELIVERY_DELAYED_QUIET".to_string(),
-                        "quiet".to_string(),
+                        true,
+                        "WORKER_DELIVERY_DELAYED".to_string(),
+                        "action".to_string(),
                         Some("worker".to_string()),
-                        None,
+                        Some("state_entry".to_string()),
                         Some(remaining),
                         poll_interval,
                     )
@@ -454,8 +455,8 @@ fn monitor_decision(
                     review_reminder_stage(elapsed, remaining, alert_before, poll_interval)
                 {
                     let event_code = match stage.as_str() {
-                        "opened" => "FUNDER_REVIEW_OPENED",
-                        "opened_and_deadline" => "FUNDER_REVIEW_REQUIRED",
+                        "state_entry" => "FUNDER_REVIEW_OPENED",
+                        "state_entry_and_deadline" => "FUNDER_REVIEW_REQUIRED",
                         "final" => "FUNDER_REVIEW_DEADLINE",
                         _ => "FUNDER_REVIEW_APPROACHING",
                     };
@@ -475,12 +476,12 @@ fn monitor_decision(
                     )
                 } else {
                     (
-                        false,
                         true,
-                        "FUNDER_REVIEW_QUIET".to_string(),
-                        "quiet".to_string(),
+                        true,
+                        "FUNDER_REVIEW_OPENED".to_string(),
+                        "info".to_string(),
                         Some("funder".to_string()),
-                        None,
+                        Some("state_entry".to_string()),
                         Some(remaining),
                         poll_interval,
                     )
@@ -502,17 +503,17 @@ fn monitor_decision(
                         )
                     } else {
                         (
-                            false,
                             true,
-                            "FUNDER_REVIEW_DELAYED_QUIET".to_string(),
-                            "quiet".to_string(),
+                            true,
+                            "FUNDER_REVIEW_DELAYED".to_string(),
+                            "warning".to_string(),
                             Some("funder".to_string()),
-                            None,
+                            Some("state_entry".to_string()),
                             Some(review_end.saturating_sub(observed_at)),
                             poll_interval,
                         )
                     }
-                } else if milestone.protocol_version == 1 {
+                } else if milestone.protocol_version >= 1 {
                     let settlement_stage =
                         sparse_reminder_stage(observed_at.saturating_sub(claimable), poll_interval);
                     match (funder_stage, settlement_stage) {
@@ -547,12 +548,12 @@ fn monitor_decision(
                             poll_interval,
                         ),
                         (None, None) => (
-                            false,
                             true,
-                            "PERMISSIONLESS_SETTLEMENT_PENDING_QUIET".to_string(),
-                            "quiet".to_string(),
-                            Some("permissionless_trigger".to_string()),
-                            None,
+                            true,
+                            "FUNDER_REVIEW_DELAYED_SETTLEMENT_READY".to_string(),
+                            "action".to_string(),
+                            Some("funder_and_permissionless_trigger".to_string()),
+                            Some("funder_state_entry+settlement_state_entry".to_string()),
                             None,
                             poll_interval,
                         ),
@@ -573,12 +574,12 @@ fn monitor_decision(
                         )
                     } else {
                         (
-                            false,
                             true,
-                            "LEGACY_WORKER_CLAIM_QUIET".to_string(),
-                            "quiet".to_string(),
+                            true,
+                            "LEGACY_WORKER_CLAIM_READY".to_string(),
+                            "action".to_string(),
                             Some("worker".to_string()),
-                            None,
+                            Some("state_entry".to_string()),
                             Some(claimable.saturating_sub(observed_at)),
                             poll_interval,
                         )
@@ -587,7 +588,7 @@ fn monitor_decision(
             }
         }
         MilestoneStatus::Paid => {
-            if milestone.protocol_version == 1 {
+            if milestone.protocol_version >= 1 {
                 (
                     true,
                     true,
@@ -612,7 +613,7 @@ fn monitor_decision(
             }
         }
         MilestoneStatus::Refunded => {
-            if milestone.protocol_version == 1 {
+            if milestone.protocol_version >= 1 {
                 (
                     true,
                     true,
@@ -686,9 +687,9 @@ fn review_reminder_stage(
     if elapsed >= 0 && elapsed < poll {
         return Some(
             if seconds_to_boundary <= poll {
-                "opened_and_deadline"
+                "state_entry_and_deadline"
             } else {
-                "opened"
+                "state_entry"
             }
             .to_string(),
         );
@@ -702,7 +703,7 @@ fn sparse_reminder_stage(elapsed: i64, poll_interval_secs: u32) -> Option<String
     }
     let poll = i64::from(poll_interval_secs);
     if elapsed < poll {
-        return Some("immediate".to_string());
+        return Some("state_entry".to_string());
     }
     for (threshold, label) in [(30 * 60_i64, "30m"), (2 * 60 * 60_i64, "2h")] {
         if elapsed >= threshold && elapsed < threshold.saturating_add(poll) {
@@ -761,9 +762,15 @@ fn decode_milestone(data: &[u8]) -> Result<MilestoneView, StatusError> {
     let review_window_secs = u32::from_le_bytes(take::<4>(data, &mut offset)?);
     let submitted_at = i64::from_le_bytes(take::<8>(data, &mut offset)?);
     let versioned_revision = take::<1>(data, &mut offset)?[0];
-    let protocol_version = u8::from(versioned_revision & PROTOCOL_V1_FLAG != 0);
+    let protocol_version = if versioned_revision & PROTOCOL_V1_FLAG == 0 {
+        0
+    } else if versioned_revision & PROTOCOL_V2_FLAG != 0 {
+        2
+    } else {
+        1
+    };
     let revision_count = versioned_revision & REVISION_COUNT_MASK;
-    let claim_grace_secs = if protocol_version == 1 {
+    let claim_grace_secs = if protocol_version >= 1 {
         review_window_secs.min(MAX_CLAIM_GRACE_SECS)
     } else {
         0
@@ -848,7 +855,7 @@ mod tests {
         revisions: u8,
         protocol_v1: bool,
     ) -> Vec<u8> {
-        account_bytes_for_review_window(status, submitted_at, revisions, protocol_v1, 60)
+        account_bytes_for_protocol(status, submitted_at, revisions, u8::from(protocol_v1), 60)
     }
 
     fn account_bytes_for_review_window(
@@ -856,6 +863,22 @@ mod tests {
         submitted_at: i64,
         revisions: u8,
         protocol_v1: bool,
+        review_window_secs: u32,
+    ) -> Vec<u8> {
+        account_bytes_for_protocol(
+            status,
+            submitted_at,
+            revisions,
+            u8::from(protocol_v1),
+            review_window_secs,
+        )
+    }
+
+    fn account_bytes_for_protocol(
+        status: MilestoneStatus,
+        submitted_at: i64,
+        revisions: u8,
+        protocol_version: u8,
         review_window_secs: u32,
     ) -> Vec<u8> {
         let mut bytes = Vec::with_capacity(ACCOUNT_DATA_LEN);
@@ -870,10 +893,10 @@ mod tests {
         bytes.extend_from_slice(&10_000_i64.to_le_bytes());
         bytes.extend_from_slice(&review_window_secs.to_le_bytes());
         bytes.extend_from_slice(&submitted_at.to_le_bytes());
-        bytes.push(if protocol_v1 {
-            PROTOCOL_V1_FLAG | revisions
-        } else {
-            revisions
+        bytes.push(match protocol_version {
+            2 => PROTOCOL_V1_FLAG | PROTOCOL_V2_FLAG | revisions,
+            1 => PROTOCOL_V1_FLAG | revisions,
+            _ => revisions,
         });
         bytes.push(match status {
             MilestoneStatus::Open => 0,
@@ -1000,9 +1023,10 @@ mod tests {
             Some("worker")
         );
 
-        let quiet = report(MilestoneStatus::Open, 0, 0, 10_400);
-        assert!(!quiet.monitor.should_notify);
-        assert_eq!(quiet.monitor.event_code, "WORKER_DELIVERY_DELAYED_QUIET");
+        let recovered = report(MilestoneStatus::Open, 0, 0, 10_400);
+        assert!(recovered.monitor.should_notify);
+        assert_eq!(recovered.monitor.event_code, "WORKER_DELIVERY_DELAYED");
+        assert_eq!(recovered.monitor.event_id, immediate.monitor.event_id);
 
         let escalated = report(MilestoneStatus::Open, 0, 0, 11_800);
         assert!(escalated.monitor.should_notify);
@@ -1032,7 +1056,10 @@ mod tests {
         assert_eq!(report.reason_codes, vec!["CLAIM_GRACE_ACTIVE"]);
         assert_eq!(report.monitor.event_code, "FUNDER_REVIEW_DELAYED");
         assert_eq!(report.monitor.responsible_role.as_deref(), Some("funder"));
-        assert_eq!(report.monitor.reminder_stage.as_deref(), Some("immediate"));
+        assert_eq!(
+            report.monitor.reminder_stage.as_deref(),
+            Some("state_entry")
+        );
     }
 
     #[test]
@@ -1051,22 +1078,23 @@ mod tests {
         );
         assert_eq!(
             report.monitor.reminder_stage.as_deref(),
-            Some("funder_immediate+settlement_immediate")
+            Some("funder_state_entry+settlement_state_entry")
         );
     }
 
     #[test]
-    fn actionable_reminders_back_off_without_local_state() {
+    fn actionable_state_is_recoverable_and_relay_deduplicable() {
         let immediate = report(MilestoneStatus::Submitted, 2_000, 0, 2_120);
-        let quiet = report(MilestoneStatus::Submitted, 2_000, 0, 2_500);
+        let recovered = report(MilestoneStatus::Submitted, 2_000, 0, 2_500);
         let thirty_minutes = report(MilestoneStatus::Submitted, 2_000, 0, 3_920);
 
         assert!(immediate.monitor.should_notify);
-        assert!(!quiet.monitor.should_notify);
+        assert!(recovered.monitor.should_notify);
         assert_eq!(
-            quiet.monitor.event_code,
-            "PERMISSIONLESS_SETTLEMENT_PENDING_QUIET"
+            recovered.monitor.event_code,
+            "FUNDER_REVIEW_DELAYED_SETTLEMENT_READY"
         );
+        assert_eq!(recovered.monitor.event_id, immediate.monitor.event_id);
         assert!(thirty_minutes.monitor.should_notify);
         assert_eq!(
             thirty_minutes.monitor.event_code,
@@ -1103,7 +1131,7 @@ mod tests {
         );
         assert_eq!(
             first_funder_delay.monitor.reminder_stage.as_deref(),
-            Some("immediate")
+            Some("state_entry")
         );
 
         let funder_thirty_minutes = report_with_review_window(
@@ -1139,7 +1167,7 @@ mod tests {
         );
         assert_eq!(
             settlement_ready.monitor.reminder_stage.as_deref(),
-            Some("immediate")
+            Some("state_entry")
         );
 
         let funder_two_hours = report_with_review_window(
@@ -1300,6 +1328,34 @@ mod tests {
     }
 
     #[test]
+    fn v2_accounts_report_worker_signed_acceptance_and_keep_v1_settlement_rules() {
+        let bytes = account_bytes_for_protocol(MilestoneStatus::Submitted, 2_000, 1, 2, 60);
+        let response = serde_json::to_vec(&json!({
+            "result": {
+                "context": {"slot": 456},
+                "value": {
+                    "data": [BASE64.encode(bytes), "base64"],
+                    "executable": false,
+                    "owner": PRAZOPAY_PROGRAM_ID
+                }
+            }
+        }))
+        .unwrap();
+        let report = inspect_account_response(&response)
+            .unwrap()
+            .report(&request(), 2_120)
+            .unwrap();
+
+        assert_eq!(report.protocol_version, "v2");
+        assert_eq!(report.acceptance_policy, "worker_signed_silence_acceptance");
+        assert_eq!(report.revision_count, 1);
+        assert_eq!(report.claim_grace_secs, 60);
+        assert_eq!(report.worker_actions, vec!["claim_after_review"]);
+        assert_eq!(report.permissionless_actions, vec!["settle_after_review"]);
+        assert_eq!(report.reason_codes, vec!["SILENCE_ACCEPTANCE_SETTLEABLE"]);
+    }
+
+    #[test]
     fn legacy_terminal_accounts_never_invent_an_outcome_timestamp() {
         let bytes = account_bytes_for_version(MilestoneStatus::Paid, 2_000, 0, false);
         let response = serde_json::to_vec(&json!({
@@ -1435,7 +1491,11 @@ mod tests {
             Some("funder_day_1+settlement_day_1")
         );
         assert!(day_one.monitor.should_notify);
-        assert!(!day_one_quiet.monitor.should_notify);
+        assert!(day_one_quiet.monitor.should_notify);
+        assert_eq!(
+            day_one_quiet.monitor.reminder_stage.as_deref(),
+            Some("funder_state_entry+settlement_state_entry")
+        );
         assert_eq!(
             day_two.monitor.reminder_stage.as_deref(),
             Some("funder_day_2+settlement_day_2")

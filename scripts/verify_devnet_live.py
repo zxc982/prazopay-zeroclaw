@@ -24,6 +24,7 @@ PROGRAM_ID = "DjdT1wW8zEoK395yujT5ujBsDboBUFyx5LCfLBSwxAjm"
 UPGRADEABLE_LOADER_ID = "BPFLoaderUpgradeab1e11111111111111111111111"
 ACCOUNT_DATA_LEN = 231
 PROTOCOL_V1_FLAG = 0x80
+PROTOCOL_V2_FLAG = 0x40
 BASE58_ALPHABET = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz"
 
 
@@ -123,8 +124,14 @@ def decode_milestone_account(data: bytes) -> dict[str, Any]:
         "due_at": due_at,
         "review_window_secs": review_window_secs,
         "submitted_at": submitted_at,
-        "protocol_version": 1 if versioned_revision & PROTOCOL_V1_FLAG else 0,
-        "revision_count": versioned_revision & 0x7F,
+        "protocol_version": (
+            2
+            if versioned_revision & PROTOCOL_V2_FLAG
+            else 1
+            if versioned_revision & PROTOCOL_V1_FLAG
+            else 0
+        ),
+        "revision_count": versioned_revision & 0x3F,
         "status": statuses[status_value],
         "bump": bump,
     }

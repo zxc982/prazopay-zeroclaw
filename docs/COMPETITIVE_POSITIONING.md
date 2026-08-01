@@ -20,8 +20,8 @@ PrazoPay should not claim novelty in any of those lanes.
 | Question | Existing payment tools | PrazoPay |
 |---|---|---|
 | Primary problem | How to request, observe, or execute a payment | How to make a funded work deadline enforceable |
-| Money timing | Payment happens now or after human signing | Funds are committed before work starts |
-| Ghosting | Usually outside scope | Explicitly accepted silence rule, full review, claim grace, then worker-signed claim |
+| Money timing | Payment happens now or after human signing | Worker first accepts committed terms; only then can the Funder lock funds and start delivery time |
+| Ghosting | Usually outside scope | Worker-signed silence rule, full review, claim grace, then fixed-recipient settlement |
 | Missed deadline | Usually outside scope | Deterministic refund when no submission is pending |
 | Terms | Invoice fields or spend policy | Immutable terms commitment plus lifecycle |
 | Agent authority | May build, monitor, or micro-spend | Read-only coordination; program owns settlement rules |
@@ -30,12 +30,12 @@ PrazoPay should not claim novelty in any of those lanes.
 
 ## Judge-facing sentence
 
-> PrazoPay is not a wallet tool. It is a deadline protocol: a Solana program
-> locks a freelance milestone before work begins, records the funder's explicit
-> silence-acceptance acknowledgement, guarantees a complete review window plus
-> claim grace after an on-time submission, and refunds only when the active
-> deadline passes without a pending delivery. ZeroClaw coordinates and
-> escalates the workflow without ever holding a key.
+> PrazoPay is not a wallet tool. It is a two-party deadline protocol: the
+> Funder proposes committed terms, the named Worker must sign acceptance, and
+> only then can SOL be locked and delivery time begin. After submission, the
+> program guarantees the accepted review and grace windows and enforces the
+> fixed Worker payout or Funder refund. ZeroClaw coordinates and escalates the
+> workflow without ever holding a key.
 
 ## Evidence required before submission
 

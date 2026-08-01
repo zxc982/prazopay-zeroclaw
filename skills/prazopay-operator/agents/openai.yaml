@@ -1,4 +1,4 @@
 interface:
   display_name: "PrazoPay Operator"
-  short_description: "Operate and explain public devnet milestones"
-  default_prompt: "Use $prazopay-operator to inspect a PrazoPay devnet milestone and explain the next safe human action."
+  short_description: "Operate Agreements and milestone monitoring"
+  default_prompt: "Use $prazopay-operator to inspect a PrazoPay devnet Agreement or Milestone and explain the next safe human action."

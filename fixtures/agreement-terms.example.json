@@ -1,0 +1,12 @@
+{
+  "schema": "prazopay.agreement-terms.v1",
+  "funder": "CkNmityXoeSFZmJErqDHKbMF5mgcwLqEKiXtxsFY6ZF8",
+  "worker": "F5M9qTSuXVipJY7Rd7ZG3oySxX7iuEfi5v55nPmtRmWw",
+  "amount_lamports": 1,
+  "delivery_window_secs": 3600,
+  "review_window_secs": 600,
+  "revision_delivery_window_secs": 600,
+  "funding_window_secs": 900,
+  "proposal_lifetime_secs": 1800,
+  "silence_acceptance": true
+}
