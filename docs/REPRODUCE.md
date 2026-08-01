@@ -105,7 +105,7 @@ Every line is required.
 | v2 program execution | a fresh SBF runs propose → premature-fund rejection → Worker acceptance → funding → submission → permissionless settlement in LiteSVM |
 | v1 compatibility | existing tests execute the committed deployed-v1 fixture |
 | ZeroClaw behavior | Agreement and Milestone status/monitor unit tests |
-| WASM components | both read-only tools build from a fresh target for WASI Preview 2; raw rebuilt and committed components pass `wasm-tools validate`, then all non-semantic custom sections are stripped and the remaining executable component bytes must match exactly |
+| WASM components | both read-only tools build from a fresh target for WASI Preview 2 with project, Cargo Home, and target paths remapped to stable virtual prefixes; rebuilt and committed components pass `wasm-tools validate` and must match byte for byte |
 | delivery reliability | Python relay acknowledgement and deduplication tests |
 | scripts | Bash syntax checks for monitor, relay, approval, skill, and verifier |
 | public evidence | fixture metadata and hashes are internally consistent |

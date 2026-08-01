@@ -11,17 +11,17 @@ sbf_output="$cache_root/prazopay-sbf-output"
 
 temp_root="${TMPDIR:-/tmp}"
 wasm_target="$(mktemp -d "$temp_root/prazopay-wasm-target.XXXXXX")"
-wasm_compare="$(mktemp -d "$temp_root/prazopay-wasm-compare.XXXXXX")"
+cargo_home="${CARGO_HOME:-$HOME/.cargo}"
+wasm_encoded_rustflags="--remap-path-prefix=$project_root=/workspace"
+wasm_encoded_rustflags+=$'\x1f'
+wasm_encoded_rustflags+="--remap-path-prefix=$cargo_home=/cargo"
+wasm_encoded_rustflags+=$'\x1f'
+wasm_encoded_rustflags+="--remap-path-prefix=$wasm_target=/target"
 
 cleanup_wasm_temp() {
   case "$wasm_target" in
     "$temp_root"/prazopay-wasm-target.*)
       rm -rf -- "$wasm_target"
-      ;;
-  esac
-  case "$wasm_compare" in
-    "$temp_root"/prazopay-wasm-compare.*)
-      rm -rf -- "$wasm_compare"
       ;;
   esac
 }
@@ -60,6 +60,7 @@ RUSTUP_TOOLCHAIN=1.97.1 \
   CARGO_TARGET_DIR="$test_target" \
   cargo test --workspace
 RUSTUP_TOOLCHAIN=1.97.1 \
+CARGO_ENCODED_RUSTFLAGS="$wasm_encoded_rustflags" \
   CARGO_TARGET_DIR="$wasm_target" \
   cargo build \
     -p prazopay-status \
@@ -78,21 +79,6 @@ wasm-tools validate "$agreement_component"
 wasm-tools validate "$committed_component"
 wasm-tools validate "$committed_agreement_component"
 
-rebuilt_status_canonical="$wasm_compare/rebuilt-status.wasm"
-committed_status_canonical="$wasm_compare/committed-status.wasm"
-rebuilt_agreement_canonical="$wasm_compare/rebuilt-agreement.wasm"
-committed_agreement_canonical="$wasm_compare/committed-agreement.wasm"
-
-# Rust components may contain host-specific, non-semantic custom sections.
-# Strip every custom section from both sides before the reproducibility check;
-# the executable component structure and code remain covered byte for byte.
-wasm-tools strip --all "$component" -o "$rebuilt_status_canonical"
-wasm-tools strip --all "$committed_component" -o "$committed_status_canonical"
-wasm-tools strip --all "$agreement_component" -o "$rebuilt_agreement_canonical"
-wasm-tools strip --all \
-  "$committed_agreement_component" \
-  -o "$committed_agreement_canonical"
-
 if [[ -n "${PRAZOPAY_WASM_ARTIFACT_DIR:-}" ]]; then
   mkdir -p "$PRAZOPAY_WASM_ARTIFACT_DIR"
   cp "$component" "$PRAZOPAY_WASM_ARTIFACT_DIR/rebuilt-status.raw.wasm"
@@ -101,26 +87,14 @@ if [[ -n "${PRAZOPAY_WASM_ARTIFACT_DIR:-}" ]]; then
   cp \
     "$committed_agreement_component" \
     "$PRAZOPAY_WASM_ARTIFACT_DIR/committed-agreement.raw.wasm"
-  cp \
-    "$rebuilt_status_canonical" \
-    "$PRAZOPAY_WASM_ARTIFACT_DIR/rebuilt-status.canonical.wasm"
-  cp \
-    "$committed_status_canonical" \
-    "$PRAZOPAY_WASM_ARTIFACT_DIR/committed-status.canonical.wasm"
-  cp \
-    "$rebuilt_agreement_canonical" \
-    "$PRAZOPAY_WASM_ARTIFACT_DIR/rebuilt-agreement.canonical.wasm"
-  cp \
-    "$committed_agreement_canonical" \
-    "$PRAZOPAY_WASM_ARTIFACT_DIR/committed-agreement.canonical.wasm"
   sha256sum "$PRAZOPAY_WASM_ARTIFACT_DIR"/*.wasm \
     >"$PRAZOPAY_WASM_ARTIFACT_DIR/sha256sums.txt"
 fi
 
-cmp "$rebuilt_status_canonical" "$committed_status_canonical"
-cmp "$rebuilt_agreement_canonical" "$committed_agreement_canonical"
-echo "WASM_STATUS_CANONICAL_SHA256=$(sha256sum "$rebuilt_status_canonical" | awk '{print $1}')"
-echo "WASM_AGREEMENT_CANONICAL_SHA256=$(sha256sum "$rebuilt_agreement_canonical" | awk '{print $1}')"
+cmp "$component" "$committed_component"
+cmp "$agreement_component" "$committed_agreement_component"
+echo "WASM_STATUS_SHA256=$(sha256sum "$component" | awk '{print $1}')"
+echo "WASM_AGREEMENT_SHA256=$(sha256sum "$agreement_component" | awk '{print $1}')"
 echo "WASM_SOURCE_ARTIFACT=PASS components=2"
 mkdir -p "$sbf_output"
 CARGO_TARGET_DIR="$sbf_target" \
