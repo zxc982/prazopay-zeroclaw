@@ -82,6 +82,11 @@ case "$action" in
 
     mkdir -p "$state_dir"
     chmod 700 "$state_dir"
+    # Create the log synchronously before spawning the background process.
+    # Without this, the parent can reach chmod before the background shell has
+    # opened the append redirection, which makes a fresh relay install fail.
+    : >>"$log_file"
+    chmod 600 "$log_file"
     nohup python3 "$relay_program" \
       --listen-host 127.0.0.1 \
       --listen-port "$listen_port" \
@@ -94,7 +99,7 @@ case "$action" in
       >>"$log_file" 2>&1 </dev/null &
     pid="$!"
     printf '%s\n' "$pid" >"$pid_file"
-    chmod 600 "$pid_file" "$log_file"
+    chmod 600 "$pid_file"
 
     for _ in 1 2 3 4 5; do
       if python3 -c \
