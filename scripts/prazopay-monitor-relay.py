@@ -37,6 +37,17 @@ AGREEMENT_ACCEPTANCE_GUARD = (
 SILENCE_POLICY_GUARD = (
     "Silence acceptance applies only after delivery during the Funder review phase."
 )
+AGREEMENT_SCHEMA_GUARD = "Status schema: prazopay.agreement-status.v1"
+AGREEMENT_PROTOCOL_GUARD = "On-chain Agreement protocol: v2"
+MILESTONE_SCHEMA_GUARD = "Status schema: prazopay.status.v2"
+MILESTONE_HANDOFF_SCHEMA_GUARD = "Milestone status schema: prazopay.status.v2"
+MILESTONE_PROTOCOL_GUARD = "On-chain Milestone protocol: v2"
+MILESTONE_ACCEPTANCE_POLICY_GUARD = (
+    "Acceptance policy: worker_signed_silence_acceptance"
+)
+AMBIGUOUS_PROTOCOL_LABEL = "Protocol version:"
+LEGACY_MILESTONE_PROTOCOL = "On-chain Milestone protocol: v1"
+LEGACY_ACCEPTANCE_POLICY = "Acceptance policy: explicit_silence_acceptance"
 
 
 class StateStore:
@@ -174,6 +185,27 @@ class DeliveryProcessor:
             "PrazoPay Agreement Closed",
             "PrazoPay Escrow Funded",
         )
+        milestone_headings = (
+            "PrazoPay Active Alert",
+            "PrazoPay Delay Alert",
+            "PrazoPay Final Outcome",
+        )
+        normalized = content.replace("`", "").replace("**", "")
+        if AMBIGUOUS_PROTOCOL_LABEL.lower() in normalized.lower():
+            return (
+                HTTPStatus.UNPROCESSABLE_ENTITY,
+                "ambiguous Protocol version label is forbidden",
+            )
+        if LEGACY_MILESTONE_PROTOCOL.lower() in normalized.lower():
+            return (
+                HTTPStatus.UNPROCESSABLE_ENTITY,
+                "legacy Milestone protocol is forbidden",
+            )
+        if LEGACY_ACCEPTANCE_POLICY.lower() in normalized.lower():
+            return (
+                HTTPStatus.UNPROCESSABLE_ENTITY,
+                "legacy acceptance policy is forbidden",
+            )
         if any(heading in content for heading in agreement_headings):
             expected_explorer = (
                 "https://explorer.solana.com/address/"
@@ -185,11 +217,60 @@ class DeliveryProcessor:
                     "Agreement Explorer URL is missing or does not match the monitored address",
                 )
 
+        if any(
+            heading in content
+            for heading in (
+                "PrazoPay Agreement Proposal",
+                "PrazoPay Agreement Accepted",
+                "PrazoPay Agreement Closed",
+            )
+        ):
+            missing = self._missing_guards(
+                normalized,
+                (AGREEMENT_SCHEMA_GUARD, AGREEMENT_PROTOCOL_GUARD),
+            )
+            if missing:
+                return (
+                    HTTPStatus.UNPROCESSABLE_ENTITY,
+                    f"Agreement card is missing exact v2 provenance: {missing}",
+                )
+
+        if "PrazoPay Escrow Funded" in content:
+            missing = self._missing_guards(
+                normalized,
+                (
+                    AGREEMENT_SCHEMA_GUARD,
+                    AGREEMENT_PROTOCOL_GUARD,
+                    MILESTONE_HANDOFF_SCHEMA_GUARD,
+                    MILESTONE_PROTOCOL_GUARD,
+                    MILESTONE_ACCEPTANCE_POLICY_GUARD,
+                ),
+            )
+            if missing:
+                return (
+                    HTTPStatus.UNPROCESSABLE_ENTITY,
+                    f"funded handoff card is missing exact v2 provenance: {missing}",
+                )
+
+        if any(heading in content for heading in milestone_headings):
+            missing = self._missing_guards(
+                normalized,
+                (
+                    MILESTONE_SCHEMA_GUARD,
+                    MILESTONE_PROTOCOL_GUARD,
+                    MILESTONE_ACCEPTANCE_POLICY_GUARD,
+                ),
+            )
+            if missing:
+                return (
+                    HTTPStatus.UNPROCESSABLE_ENTITY,
+                    f"Milestone card is missing exact v2 provenance: {missing}",
+                )
+
         if (
             "PrazoPay Agreement Proposal" in content
             or "PrazoPay Agreement Accepted" in content
         ):
-            normalized = content.replace("`", "")
             if AGREEMENT_ACCEPTANCE_GUARD not in normalized:
                 return (
                     HTTPStatus.UNPROCESSABLE_ENTITY,
@@ -234,6 +315,10 @@ class DeliveryProcessor:
 
         return HTTPStatus.OK, "event delivered and committed"
 
+    @staticmethod
+    def _missing_guards(content: str, required: tuple[str, ...]) -> str:
+        return ", ".join(guard for guard in required if guard not in content)
+
     def _process_failure_locked(self, failure_code: str, recipient: str) -> tuple[int, str]:
         state = self.state_store.load()
         if state["closed"]:
@@ -261,15 +346,36 @@ class DeliveryProcessor:
             return HTTPStatus.OK, "degraded output suppressed between sparse stages"
 
         event_id = self._health_event_id(health["degraded_since"], stage, failure_code)
+        if failure_code == "PRAZOPAY_PROTOCOL_MISMATCH":
+            heading = "PrazoPay Monitor Integrity Block"
+            event_code = "MONITOR_INTEGRITY_DEGRADED"
+            explanation = (
+                "- Protocol state: blocked; tool provenance did not match the "
+                "required v2 tuple\n"
+            )
+            next_action = (
+                "Next action: verify the installed read-only WASM hash and restart "
+                "ZeroClaw. Do not sign or act on a workflow card until a fresh v2 "
+                "read succeeds."
+            )
+        else:
+            heading = "PrazoPay Monitor Degraded"
+            event_code = "MONITOR_RPC_DEGRADED"
+            explanation = (
+                "- Protocol state: unknown; no transaction decision was inferred\n"
+            )
+            next_action = (
+                "Next action: ZeroClaw will retry on the next heartbeat. "
+                "Do not sign based on this infrastructure alert."
+            )
         content = (
-            "PrazoPay Monitor Degraded\n"
-            "- Event: MONITOR_RPC_DEGRADED\n"
+            f"{heading}\n"
+            f"- Event: {event_code}\n"
             f"- Failure code: {failure_code}\n"
             f"- Reminder stage: {stage}\n"
-            "- Protocol state: unknown; no transaction decision was inferred\n"
+            f"{explanation}"
             f"Event ID: {event_id}\n\n"
-            "Next action: ZeroClaw will retry on the next heartbeat. "
-            "Do not sign based on this infrastructure alert."
+            f"{next_action}"
         )
         if not self.sender(content, recipient):
             return HTTPStatus.SERVICE_UNAVAILABLE, "Discord delivery failed; retry required"
@@ -297,9 +403,14 @@ class DeliveryProcessor:
         event_id = self._health_event_id(
             health["degraded_since"], "recovered", health["failure_code"]
         )
+        recovery_event = (
+            "MONITOR_INTEGRITY_RECOVERED"
+            if health["failure_code"] == "PRAZOPAY_PROTOCOL_MISMATCH"
+            else "MONITOR_RPC_RECOVERED"
+        )
         content = (
             "PrazoPay Monitor Recovered\n"
-            "- Event: MONITOR_RPC_RECOVERED\n"
+            f"- Event: {recovery_event}\n"
             f"- Previous failure: {health['failure_code']}\n"
             "- Protocol state: read succeeded; normal monitoring resumed\n"
             f"Event ID: {event_id}\n\n"

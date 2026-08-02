@@ -26,7 +26,8 @@ The monitor decision contains:
 
 - `should_notify` and `continue_monitoring`;
 - an event code, severity, and responsible role;
-- the protocol version, acceptance policy, and sparse reminder stage;
+- the status schema, on-chain Milestone protocol, acceptance policy, and sparse
+  reminder stage;
 - seconds to the relevant deadline boundary;
 - a recommended next-check interval; and
 - a stable, state-bound `event_id` for reminder correlation and downstream
@@ -43,6 +44,12 @@ deadline boundaries, immediate readiness, 30 minutes, 2 hours, and then daily.
 Other polls are quiet. Event IDs are bound to the lifecycle state and reminder
 stage. The relay commits an event ID only after a successful Discord send and
 suppresses that ID on later polls and after restarts.
+
+Before Discord delivery, the relay requires the exact v2 provenance tuple
+`prazopay.status.v2 / v2 / worker_signed_silence_acceptance`. It rejects the
+ambiguous card label `Protocol version`, any v1 Milestone value, and the legacy
+`explicit_silence_acceptance` policy. This prevents a stale installed WASM or
+model-formatted legacy field from being presented as current v2 evidence.
 
 For a v1 or v2 terminal state, the tool deliberately returns the same final
 event on every poll and keeps `continue_monitoring = true`. This is a retry

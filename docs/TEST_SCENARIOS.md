@@ -168,9 +168,14 @@ SUBMITTED/claimable -> permissionless settlement ready
 PAID or REFUNDED -> one final outcome, then monitoring stops
 ```
 
-Expected: every alert is English and contains the protocol version,
-acceptance policy, reminder stage, allowed action names, stable event ID, and
-Explorer link.
+Expected: every Milestone alert is English and contains the exact provenance
+fields `Status schema: prazopay.status.v2`,
+`On-chain Milestone protocol: v2`, and
+`Acceptance policy: worker_signed_silence_acceptance`, followed by the reminder
+stage, allowed action names, stable event ID, and Explorer link. Agreement cards
+contain `Status schema: prazopay.agreement-status.v1` and
+`On-chain Agreement protocol: v2`. The ambiguous label `Protocol version` and
+all legacy v1 Milestone/policy values are rejected by the relay before Discord.
 
 ## Suite E: extreme time and value boundaries
 

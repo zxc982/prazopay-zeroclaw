@@ -27,6 +27,25 @@ AGREEMENT_EXPLORER = (
 )
 
 
+def milestone_card(event_id, heading="PrazoPay Active Alert", event=None):
+    lines = [
+        heading,
+        RELAY.MILESTONE_SCHEMA_GUARD,
+        RELAY.MILESTONE_PROTOCOL_GUARD,
+        RELAY.MILESTONE_ACCEPTANCE_POLICY_GUARD,
+    ]
+    if event is not None:
+        lines.append(f"Event: {event}")
+    lines.append(f"Event ID: {event_id}")
+    return "\n".join(lines)
+
+
+def agreement_provenance():
+    return "\n".join(
+        (RELAY.AGREEMENT_SCHEMA_GUARD, RELAY.AGREEMENT_PROTOCOL_GUARD)
+    )
+
+
 class RelayTests(unittest.TestCase):
     def setUp(self):
         self.temporary = tempfile.TemporaryDirectory()
@@ -53,7 +72,7 @@ class RelayTests(unittest.TestCase):
         self.temporary.cleanup()
 
     def test_same_event_is_delivered_once(self):
-        content = f"PrazoPay Active Alert\nEvent ID: {EVENT_ONE}"
+        content = milestone_card(EVENT_ONE)
         first = self.processor.process(content, CHANNEL)
         second = self.processor.process(content, CHANNEL)
         self.assertEqual(first[0], 200)
@@ -69,7 +88,7 @@ class RelayTests(unittest.TestCase):
             return len(attempts) > 1
 
         self.processor.sender = flaky_sender
-        content = f"PrazoPay Delay Alert\nEvent ID: {EVENT_ONE}"
+        content = milestone_card(EVENT_ONE, "PrazoPay Delay Alert")
         first = self.processor.process(content, CHANNEL)
         second = self.processor.process(content, CHANNEL)
         self.assertEqual(first[0], 503)
@@ -77,12 +96,10 @@ class RelayTests(unittest.TestCase):
         self.assertEqual(len(attempts), 2)
 
     def test_terminal_delivery_closes_all_future_output(self):
-        terminal = (
-            "PrazoPay Final Outcome\n"
-            "Event: SETTLEMENT_SUCCESS\n"
-            f"Event ID: {EVENT_ONE}"
+        terminal = milestone_card(
+            EVENT_ONE, "PrazoPay Final Outcome", "SETTLEMENT_SUCCESS"
         )
-        later = f"PrazoPay Active Alert\nEvent ID: {EVENT_TWO}"
+        later = milestone_card(EVENT_TWO)
         self.assertEqual(self.processor.process(terminal, CHANNEL)[0], 200)
         self.assertEqual(self.processor.process(later, CHANNEL)[0], 200)
         self.assertEqual(len(self.sent), 1)
@@ -94,6 +111,10 @@ class RelayTests(unittest.TestCase):
     def test_agreement_funding_keeps_journey_monitor_open_for_handoff(self):
         funded = (
             "PrazoPay Escrow Funded\n"
+            f"{agreement_provenance()}\n"
+            f"{RELAY.MILESTONE_HANDOFF_SCHEMA_GUARD}\n"
+            f"{RELAY.MILESTONE_PROTOCOL_GUARD}\n"
+            f"{RELAY.MILESTONE_ACCEPTANCE_POLICY_GUARD}\n"
             "Event: AGREEMENT_FUNDED\n"
             f"Explorer: {AGREEMENT_EXPLORER}\n"
             f"Event ID: {EVENT_ONE}"
@@ -106,6 +127,7 @@ class RelayTests(unittest.TestCase):
     def test_agreement_expiry_closes_journey_monitor(self):
         terminal = (
             "PrazoPay Agreement Closed\n"
+            f"{agreement_provenance()}\n"
             "Event: AGREEMENT_FUNDING_WINDOW_EXPIRED\n"
             f"Explorer: {AGREEMENT_EXPLORER}\n"
             f"Event ID: {EVENT_ONE}"
@@ -123,10 +145,8 @@ class RelayTests(unittest.TestCase):
             return next(disable_results)
 
         self.processor.disable_heartbeat = eventually_disable
-        terminal = (
-            "PrazoPay Final Outcome\n"
-            "Event: MILESTONE_FAILED\n"
-            f"Event ID: {EVENT_ONE}"
+        terminal = milestone_card(
+            EVENT_ONE, "PrazoPay Final Outcome", "MILESTONE_FAILED"
         )
         with self.assertLogs(level="WARNING") as captured:
             self.assertEqual(self.processor.process(terminal, CHANNEL)[0], 200)
@@ -155,6 +175,7 @@ class RelayTests(unittest.TestCase):
 
         correct = (
             "PrazoPay Agreement Proposal\n"
+            f"{agreement_provenance()}\n"
             f"{RELAY.AGREEMENT_ACCEPTANCE_GUARD}\n"
             f"{RELAY.SILENCE_POLICY_GUARD}\n"
             f"Explorer: {AGREEMENT_EXPLORER}\n"
@@ -166,6 +187,7 @@ class RelayTests(unittest.TestCase):
     def test_agreement_card_requires_explicit_acceptance_semantics(self):
         missing_guard = (
             "PrazoPay Agreement Proposal\n"
+            f"{agreement_provenance()}\n"
             f"Explorer: {AGREEMENT_EXPLORER}\n"
             f"Event ID: {EVENT_ONE}"
         )
@@ -176,6 +198,7 @@ class RelayTests(unittest.TestCase):
 
         missing_scope = (
             "PrazoPay Agreement Accepted\n"
+            f"{agreement_provenance()}\n"
             f"{RELAY.AGREEMENT_ACCEPTANCE_GUARD}\n"
             f"Explorer: {AGREEMENT_EXPLORER}\n"
             f"Event ID: {EVENT_ONE}"
@@ -183,6 +206,61 @@ class RelayTests(unittest.TestCase):
         result = self.processor.process(missing_scope, CHANNEL)
         self.assertEqual(result[0], 422)
         self.assertIn("Funder review", result[1])
+        self.assertEqual(self.sent, [])
+
+    def test_milestone_card_rejects_ambiguous_or_legacy_provenance(self):
+        ambiguous = milestone_card(EVENT_ONE) + "\nProtocol version: v1"
+        result = self.processor.process(ambiguous, CHANNEL)
+        self.assertEqual(result[0], 422)
+        self.assertIn("ambiguous", result[1])
+
+        legacy_protocol = milestone_card(EVENT_ONE).replace(
+            RELAY.MILESTONE_PROTOCOL_GUARD,
+            RELAY.LEGACY_MILESTONE_PROTOCOL,
+        )
+        result = self.processor.process(legacy_protocol, CHANNEL)
+        self.assertEqual(result[0], 422)
+        self.assertIn("legacy Milestone protocol", result[1])
+
+        legacy_policy = milestone_card(EVENT_ONE).replace(
+            RELAY.MILESTONE_ACCEPTANCE_POLICY_GUARD,
+            RELAY.LEGACY_ACCEPTANCE_POLICY,
+        )
+        result = self.processor.process(legacy_policy, CHANNEL)
+        self.assertEqual(result[0], 422)
+        self.assertIn("legacy acceptance policy", result[1])
+        self.assertEqual(self.sent, [])
+
+    def test_milestone_card_requires_all_exact_v2_provenance_fields(self):
+        for missing_guard in (
+            RELAY.MILESTONE_SCHEMA_GUARD,
+            RELAY.MILESTONE_PROTOCOL_GUARD,
+            RELAY.MILESTONE_ACCEPTANCE_POLICY_GUARD,
+        ):
+            content = milestone_card(EVENT_ONE).replace(
+                f"{missing_guard}\n", ""
+            )
+            result = self.processor.process(content, CHANNEL)
+            self.assertEqual(result[0], 422)
+            self.assertIn("exact v2 provenance", result[1])
+        self.assertEqual(self.sent, [])
+
+    def test_exact_v2_milestone_provenance_is_delivered(self):
+        result = self.processor.process(milestone_card(EVENT_ONE), CHANNEL)
+        self.assertEqual(result[0], 200)
+        self.assertEqual(len(self.sent), 1)
+
+    def test_agreement_card_rejects_wrong_protocol(self):
+        content = (
+            "PrazoPay Agreement Closed\n"
+            f"{RELAY.AGREEMENT_SCHEMA_GUARD}\n"
+            "On-chain Agreement protocol: v1\n"
+            f"Explorer: {AGREEMENT_EXPLORER}\n"
+            f"Event ID: {EVENT_ONE}"
+        )
+        result = self.processor.process(content, CHANNEL)
+        self.assertEqual(result[0], 422)
+        self.assertIn("exact v2 provenance", result[1])
         self.assertEqual(self.sent, [])
 
     def test_rpc_failure_alerts_sparsely_then_recovers(self):
@@ -227,8 +305,20 @@ class RelayTests(unittest.TestCase):
         self.assertEqual(len(attempts), 2)
         self.assertEqual(attempts[0][0], attempts[1][0])
 
+    def test_protocol_mismatch_is_an_integrity_block_not_an_rpc_claim(self):
+        failure = "NO_REPLY[FAIL]: PRAZOPAY_PROTOCOL_MISMATCH"
+        self.assertEqual(self.processor.process(failure, CHANNEL)[0], 200)
+        self.assertEqual(len(self.sent), 1)
+        self.assertIn("PrazoPay Monitor Integrity Block", self.sent[-1][0])
+        self.assertIn("MONITOR_INTEGRITY_DEGRADED", self.sent[-1][0])
+        self.assertNotIn("MONITOR_RPC_DEGRADED", self.sent[-1][0])
+
+        self.assertEqual(self.processor.process("NO_REPLY", CHANNEL)[0], 200)
+        self.assertEqual(len(self.sent), 2)
+        self.assertIn("MONITOR_INTEGRITY_RECOVERED", self.sent[-1][0])
+
     def test_actionable_duplicate_after_outage_emits_one_recovery(self):
-        content = f"PrazoPay Active Alert\nEvent ID: {EVENT_ONE}"
+        content = milestone_card(EVENT_ONE)
         self.assertEqual(self.processor.process(content, CHANNEL)[0], 200)
         self.assertEqual(
             self.processor.process(
@@ -242,7 +332,7 @@ class RelayTests(unittest.TestCase):
 
     def test_wrong_recipient_is_rejected(self):
         result = self.processor.process(
-            f"PrazoPay Active Alert\nEvent ID: {EVENT_ONE}",
+            milestone_card(EVENT_ONE),
             "1532408222730686566",
         )
         self.assertEqual(result[0], 400)
@@ -271,7 +361,7 @@ class RelayTests(unittest.TestCase):
         )
         with self.assertRaises(ValueError):
             self.processor.process(
-                f"PrazoPay Active Alert\nEvent ID: {EVENT_ONE}", CHANNEL
+                milestone_card(EVENT_ONE), CHANNEL
             )
         self.assertEqual(self.sent, [])
 
@@ -285,7 +375,7 @@ class RelayTests(unittest.TestCase):
         endpoint = f"http://127.0.0.1:{server.server_port}/heartbeat"
         payload = json.dumps(
             {
-                "content": f"PrazoPay Active Alert\nEvent ID: {EVENT_ONE}",
+                "content": milestone_card(EVENT_ONE),
                 "recipient": CHANNEL,
             }
         ).encode("utf-8")
